@@ -1,6 +1,13 @@
 #!/bin/bash
-gribdir=/data/research/verification/data_requests/requests_2015/bcs30429/data/
-basedir=/data/research/various/home/tom/KLM/
+
+# TODO Make coordinates argument
+# Model grid point definition at Schiphol
+gridLat=52.31555938720703
+gridLong=4.790283679962158
+
+gribdir="/data/research/verification/data_requests/requests_2015/bcs30429/data/" # TODO Make argument
+
+basedir="./schiphol/"
 paramdir=${basedir}data/
 tmpdir=${basedir}data/tmp/
 
@@ -59,17 +66,14 @@ model_issues[0]=0
 model_issues[1]=1200
 nr_issues=${#model_issues[@]}
 
-# Model grid point definition at Schiphol
-gridLat=52.31555938720703
-gridLong=4.790283679962158
-
+file_count=0
 echo "Starting main loop.."
 # Loop over different models
-for((m=0; m<1; m++)); do
+for((m=0; m<${nr_models}; m++)); do
     model_prefix=${model_prefixes[m]}
 
     # Loop over model issues
-    for((k=0; k<1; k++)); do
+    for((k=0; k<${nr_issues}; k++)); do
         issue_time=${model_issues[k]}
 
         # Loop over elements
@@ -81,15 +85,16 @@ for((m=0; m<1; m++)); do
 
                 file_suffix=${model_prefix}_${variable}_${issue_time}
                 processFile "${gribdir}bcs30429_${file_suffix}.grb" "${file_suffix}"
+                file_count=$((file_count+1))
+                echo "Processed ${file_count} files.."
             else
                 # Loop over dates
-                for ((i=0; i<1; i++)); do
+                for ((i=0; i<${$}; i++)); do
                     date=${dates[i]}
                     file_suffix=${model_prefix}_${date}_${variable}_${issue_time}
                     processFile "${gribdir}bcs30429_${file_suffix}.grb" "${file_suffix}"
-
-                    # Add Lat long to file
-                    # awk '{print '${gridLat}' " " '${gridLong}' " " $0 }' ${interpolatedgribdir}${date}_4_tmp_raw.txt > ${interpolatedgribdir}${date}_3_tmp_raw.txt
+                    file_count=$((file_count+1))
+                    echo "Processed ${file_count} files.."
                 done
             fi
         done
