@@ -1,11 +1,11 @@
 #!/bin/bash
-
 # TODO Make coordinates argument
 # Model grid point definition at Schiphol
 gridLat=52.31555938720703
 gridLong=4.790283679962158
 
-gribdir="/data/research/verification/data_requests/requests_2015/bcs30429/data/" # TODO Make argument
+# TODO Make argument
+gribdir="/data/research/verification/data_requests/requests_2015/bcs30429/data/"
 
 basedir="./schiphol/"
 paramdir=${basedir}data/
@@ -14,33 +14,50 @@ tmpdir=${basedir}data/tmp/
 export GRIB_INVENTORY_MODE=time
 
 readLines(){
+    old_IFS=$IFS
     array=()
     while IFS= read -r line; do
         array+=("$line")    # Append to array
     done < $2
     # echo ${array[*]}
     eval $1=\("${array[@]}"\) # Reassign array
+    IFS=$old_ifs
 }
 
 processFile(){
+    old_IFS=$IFS
     # Argument 1: input file
     input_file=${1}
+    # Extract grib data
+    lines=`grib_ls -p ${col_headers} -w level:d=0 -l ${gridLat},${gridLong},4 ${input_file}`
+    # Compress spaces, remove trailing whitespace and header line.
+    lines=`echo "${lines}" | tr -s ' ' | sed 's/[ \t]*$//' | tail -n +2`
 
-    # Argument 2: file suffix
-    suffix=${2}
-
-    lines=`grib_ls -p ${col_headers} -w level:d=0 -l ${gridLat},${gridLong},4 ${input_file}` # Extract grib data
-    lines=`echo "${lines}" | tr -s ' ' | sed 's/[ \t]*$//' | tail -n +2`  # Compress spaces, remove trailing whitespace and header line.
-
+    # Count number of lines with actual data.
+    # The first line containing a file name is the file summary and marks the
+    # last line of data in the file.
     nr_data_lines=`echo "${lines}" | awk '/.grb/{ print NR; exit }'`
+
+    # Number of data lines with
     data_lines=`echo "${lines}" | head -n $((${nr_data_lines}-1))`
+    data_lines=`echo "${data_lines}" | tr ' ' ','` # Covnert data lines into csv
+
     meta_lines=`echo "${lines}" | tail -n 4`
     unset lines # Free memory
-
-    data_lines=`echo "${data_lines}" | tr ' ' ','` # Covnert data lines into csv
-    echo "${data_lines}" > "${tmpdir}data_${suffix}.csv" # Write data lines to file.
-    echo "${meta_lines}" > "${tmpdir}meta_${suffix}.tmp" # Write data lines to file.
+    IFS=$old_IFS
 }
+
+writeData(){
+    # Argument 1: file suffix
+    suffix=${1}
+
+    # Argument 2: data lines to be written to file.
+    # Argument 3: meta lines to be written to file.
+    echo "Writing `echo ${2} | wc -l` lines to data file."
+    echo "${2}" > "${tmpdir}data_${suffix}.csv" # Write data lines to file.
+    echo "${3}" > "${tmpdir}meta_${suffix}.tmp" # Write data lines to file.
+}
+
 
 # Read parameters from file.
 readLines "headers_from_file" "${paramdir}data_headers.txt"
@@ -55,7 +72,6 @@ echo "$nr_dates dates read for processing."
 readLines "variables" "${paramdir}variable_ids.txt"
 nr_variables=${#variables[*]}
 echo "$nr_variables variables read for processing."
-
 model_prefixes[0]="eps"
 model_prefixes[1]="control"
 model_prefixes[2]="fc"
@@ -80,23 +96,38 @@ for((m=0; m<${nr_models}; m++)); do
         for((j=0; j<${nr_variables}; j++)); do
             variable=${variables[j]}
 
+            full_data=()
+            full_file_suffix=${model_prefix}_${variable}_${issue_time}
             if [ "${model_prefix}" != "eps" ]
             then
-
-                file_suffix=${model_prefix}_${variable}_${issue_time}
-                processFile "${gribdir}bcs30429_${file_suffix}.grb" "${file_suffix}"
+                # This function sets the data_lines and meta_lines variables.
+                processFile "${gribdir}bcs30429_${full_file_suffix}.grb"
+                full_data=${data_lines} # Set result array for data writing
                 file_count=$((file_count+1))
                 echo "Processed ${file_count} files.."
             else
                 # Loop over dates
-                for ((i=0; i<${$}; i++)); do
+                for ((i=0; i<${nr_dates}; i++)); do
                     date=${dates[i]}
                     file_suffix=${model_prefix}_${date}_${variable}_${issue_time}
-                    processFile "${gribdir}bcs30429_${file_suffix}.grb" "${file_suffix}"
+                    processFile "${gribdir}bcs30429_${file_suffix}.grb"
                     file_count=$((file_count+1))
                     echo "Processed ${file_count} files.."
+                    # Concatenate data
+                    # Check if full_data is empty
+                    if [ ${#full_data[@]} -eq 0 ]; then
+                        # Set full_data equal to data_lnes
+                        full_data=${data_lines}
+                    else
+                        # Concatenate data_lines to full_data
+                        data_lines=`echo "${data_lines}" | tail -n +2` # Strip off header line.
+                        full_data+=${data_lines}
+                    fi
                 done
             fi
+
+            # Write data to file
+            writeData "${full_file_suffix}" "${full_data}" "${meta_lines}"
         done
     done
 done
