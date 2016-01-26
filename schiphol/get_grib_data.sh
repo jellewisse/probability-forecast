@@ -9,7 +9,7 @@ gribdir="/data/research/verification/data_requests/requests_2015/bcs30429/data/"
 
 basedir="./schiphol/"
 paramdir=${basedir}data/
-tmpdir=${basedir}data/tmp/
+datadir=${basedir}data/grib/
 
 export GRIB_INVENTORY_MODE=time
 
@@ -54,8 +54,8 @@ writeData(){
     # Argument 2: data lines to be written to file.
     # Argument 3: meta lines to be written to file.
     echo "Writing `echo ${2} | wc -l` lines to data file."
-    echo "${2}" > "${tmpdir}data_${suffix}.csv" # Write data lines to file.
-    echo "${3}" > "${tmpdir}meta_${suffix}.tmp" # Write data lines to file.
+    echo "${2}" > "${datadir}data_${suffix}.csv" # Write data lines to file.
+    echo "${3}" > "${datadir}meta_${suffix}.tmp" # Write data lines to file.
 }
 
 

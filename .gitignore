@@ -1,5 +1,6 @@
-# Temporary data
+# Data folders
 tmp/
+grib/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
