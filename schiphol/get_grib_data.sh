@@ -58,6 +58,9 @@ writeData(){
     echo "${3}" > "${datadir}meta_${suffix}.tmp" # Write data lines to file.
 }
 
+if [ ! -d "$datadir" ]; then
+    mkdir $datadir
+fi
 
 # Read parameters from file.
 readLines "headers_from_file" "${paramdir}data_headers.txt"
@@ -121,7 +124,7 @@ for((m=0; m<${nr_models}; m++)); do
                     else
                         # Concatenate data_lines to full_data
                         data_lines=`echo "${data_lines}" | tail -n +2` # Strip off header line.
-                        full_data+=${data_lines}
+                        full_data=`echo -e "${full_data}\n${data_lines}"`
                     fi
                 done
             fi
