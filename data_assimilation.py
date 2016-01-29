@@ -18,7 +18,7 @@ def _get_element_key(model_name, perturbation_id,
     else:
         perturb_name = str(perturbation_id).zfill(max_nr_digits)
 
-    return model_name.upper() + perturb_name + '_' + element_name.upper()
+    return element_name.upper() + '_' + model_name.upper() + perturb_name
 
 
 # TODO Test
@@ -138,10 +138,10 @@ def load_and_interpolate_forecast(interpolation_func,
     return forecast_data
 
 
-def join_observations(forecast_data, observation_data):
+def add_observations(forecast_data):
 
-    forecast_data = pd.DataFrame.merge(
-        forecast_data, observation_data,
+    return pd.DataFrame.merge(
+        forecast_data, data_readers.read_observations(),
         copy=False
     )
 
@@ -149,6 +149,5 @@ def join_observations(forecast_data, observation_data):
 # For testing purposes
 if __name__ == "__main__":
     from helpers.interpolation import nearest_grid_point_interpolate as intpl
-    data = load_and_interpolate_forecast(intpl, "eps", "167", "0")
-
-    obs_data = data_readers.read_observations()
+    data = load_and_interpolate_forecast(intpl, "fc", "167", "0")
+    data = add_observations(data)

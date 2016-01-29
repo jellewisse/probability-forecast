@@ -33,6 +33,11 @@ def convert_temperature_deci_degrees_to_kelvin(T):
     return (float(T) / 10.0) + 273.15
 
 
+def convert_knmi_station_id_to_wmo(station_id):
+    """KNMI has three-digit station numbers, the WMO at least 5 or 6."""
+    return int("6" + str(station_id))
+
+
 # TODO Test
 def date_parser(date, hour):
     """Converts date and hour in UTC time in string format to datetime64
@@ -56,7 +61,8 @@ def read_observations():
 
     # Data type converters
     converters = {
-        'T': convert_temperature_deci_degrees_to_kelvin
+        'T': convert_temperature_deci_degrees_to_kelvin,
+        'STN': convert_knmi_station_id_to_wmo
     }
 
     obs_data = pd.read_csv(
@@ -74,7 +80,7 @@ def read_observations():
             'STN': 'station_id',
             # 'YYYYMMDD': 'valid_date',
             # 'HH': 'valid_hour',  # Warning: starts at 1 to 24.
-            'T': 'T2',
+            'T': '2T_OBS',
         },
         inplace=True
     )
