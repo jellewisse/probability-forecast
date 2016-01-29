@@ -1,7 +1,7 @@
 # data_readers.py
 import numpy as np
 import pandas as pd
-
+from datetime import timezone, datetime, timedelta
 
 # Global variable
 FILE_PATH = 'schiphol/data/'
@@ -27,11 +27,27 @@ def get_element_name(element_id):
     return element_dict[element_id]
 
 
+# TODO Test
 def convert_temperature_deci_degrees_to_kelvin(T):
     """Converts temperature given in tenths of degrees Celcius to Kelvin"""
     return (float(T) / 10.0) + 273.15
 
 
+# TODO Test
+def date_parser(date, hour):
+    """Converts date and hour in UTC time in string format to datetime64
+    objects.
+
+    date: string in yyyymmdd format.
+    hour: string in hour format.
+    """
+
+    year, month, day = (int(date[0:4]), int(date[4:6]), int(date[6:8]))
+    return datetime(year, month, day, tzinfo=timezone.utc) + \
+        timedelta(hours=int(hour))
+
+
+# TODO Test
 def read_observations():
     """Wrapper around the pandas read_csv method to load KNMI observations."""
 
@@ -45,7 +61,8 @@ def read_observations():
         na_values='',
         comment='#',
         usecols=['STN', 'YYYYMMDD', 'HH', 'T'],  # Only load these columns
-        parse_dates={'valid_date': ['YYYYMMDD']},
+        parse_dates={'valid_date': ['YYYYMMDD', 'HH']},
+        date_parser=date_parser,
         converters=converters  # Apply converters to SI units.
     )
 
@@ -62,6 +79,7 @@ def read_observations():
     return obs_data
 
 
+# TODO Test
 def read_forecast_data(model, element_id, issue, file_path=None):
     """Read in a forecast file for a specific model, element_id and issue."""
 
