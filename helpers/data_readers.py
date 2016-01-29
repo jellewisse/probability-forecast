@@ -41,11 +41,11 @@ def read_observations():
     }
 
     obs_data = pd.read_csv(
-        'schiphol/data/obs.csv',
+        FILE_PATH + 'obs.csv',
         na_values='',
         comment='#',
         usecols=['STN', 'YYYYMMDD', 'HH', 'T'],  # Only load these columns
-        parse_dates={'valid_date': ['YYYYMMDD']},  #, 'HH']},
+        parse_dates={'valid_date': ['YYYYMMDD']},
         converters=converters  # Apply converters to SI units.
     )
 
@@ -62,11 +62,14 @@ def read_observations():
     return obs_data
 
 
-def read_forecast_data(model, element_id, issue):
+def read_forecast_data(model, element_id, issue, file_path=None):
     """Read in a forecast file for a specific model, element_id and issue."""
 
+    if file_path is None:
+        file_path = FILE_PATH + 'grib/'
+
     file_name = \
-        FILE_PATH + 'grib/' + \
+        file_path + \
         '_'.join(['data', model, element_id, issue]) + \
         '.csv'
     forecast_data = pd.read_csv(
@@ -93,12 +96,15 @@ def read_forecast_data(model, element_id, issue):
     return forecast_data
 
 
-def read_meta_data(model, element_id, issue):
+def read_meta_data(model, element_id, issue, file_path=None):
     """Read a meta-data file and return the grid point latitudes, longitudes
     and distance to the query point."""
 
+    if file_path is None:
+        file_path = FILE_PATH + 'grib/'
+
     file_name = \
-        FILE_PATH + 'grib/' + \
+        file_path + \
         '_'.join(['meta', model, element_id, issue]) + \
         '.tmp'
     with open(file_name, 'r') as f:
