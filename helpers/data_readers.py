@@ -43,6 +43,9 @@ def date_parser(date, hour):
     """
 
     year, month, day = (int(date[0:4]), int(date[4:6]), int(date[6:8]))
+    # Sometimes, the hour is given as 1200
+    if len(str(hour)) > 2:
+        hour = str(hour)[0:2]
     return datetime(year, month, day, tzinfo=timezone.utc) + \
         timedelta(hours=int(hour))
 
@@ -98,19 +101,29 @@ def read_forecast_data(model, element_id, issue, file_path=None):
             'value2': np.float32,
             'value3': np.float32,
             'value4': np.float32
-        }
+        },
+        parse_dates={'issue_date': ['dataDate', 'dataTime']},
+        date_parser=date_parser
     )
     forecast_data.rename(
         columns={
             'table2Version': 'ec_table_id',
             'paramId': 'element_id',
             'shortName': 'element_name',
-            'dataDate': 'issue_date',
-            'dataTime': 'issue_hour',
+            'endStep': 'forecast_hour'
         },
         inplace=True
     )
-    forecast_data.drop(['level'], axis=1, inplace=True)
+
+    forecast_data['valid_date'] = forecast_data.apply(
+        lambda row: row['issue_date'] + timedelta(hours=row['forecast_hour']),
+        axis=1
+    )
+
+    forecast_data.drop(
+        ['level', 'stepUnits', 'startStep'],
+        axis=1, inplace=True
+    )
     return forecast_data
 
 
@@ -148,7 +161,3 @@ def read_meta_data(model, element_id, issue, file_path=None):
         distance[count] = float(line[dist_index:(dist_index + 5)])
 
     return latitude, longitude, distance
-
-# For testing
-if __name__ == '__main__':
-    obs_data = read_observations()

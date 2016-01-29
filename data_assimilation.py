@@ -30,7 +30,7 @@ def regroup_dataframe(forecast_data, model_name):
     # Define columns necessary for finding groups
     group_cols = [
         'ec_table_id', 'element_id', 'element_name',
-        'issue_date', 'issue_hour', 'startStep', 'endStep', 'stepUnits',
+        'issue_date', 'forecast_hour',
         'numberOfForecastsInEnsemble'
     ]
     grouping = forecast_data.groupby(group_cols)
@@ -75,7 +75,7 @@ def regroup_dataframe(forecast_data, model_name):
         copy=False
     )
     # Verify that the number of expected rows is present in the join.
-    assert len(forecast_data == nr_groups), \
+    assert len(forecast_data) == nr_groups, \
         "Something went wrong in reformatting the data"
     return forecast_data
 
