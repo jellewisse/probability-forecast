@@ -1,4 +1,5 @@
 # Ensemble pdf creation for temperature
+[![Build Status](https://travis-ci.org/tomderuijter/probability-forecast.svg?branch=master)](https://travis-ci.org/tomderuijter/probability-forecast)
 
 ## Verification
 - Rank histograms
