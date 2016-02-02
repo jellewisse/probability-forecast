@@ -1,3 +1,6 @@
+# OS Temporary files
+.DS_Store
+
 # Data folders
 tmp/
 grib/

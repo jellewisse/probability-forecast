@@ -13,7 +13,8 @@ def _get_element_key(model_name, perturbation_id,
 
     # Offset by 1 - counting starts at 0.
     max_nr_digits = len(str(nr_perturbations))
-    if perturbation_id == 0 and nr_perturbations == 0:
+    if (perturbation_id == 0 and nr_perturbations == 0) or \
+       model_name == 'control':
         perturb_name = ''
     else:
         perturb_name = str(perturbation_id).zfill(max_nr_digits)
@@ -144,10 +145,3 @@ def add_observations(forecast_data):
         forecast_data, data_readers.read_observations(),
         copy=False
     )
-
-
-# For testing purposes
-if __name__ == "__main__":
-    from helpers.interpolation import nearest_grid_point_interpolate as intpl
-    data = load_and_interpolate_forecast(intpl, "fc", "167", "0")
-    data = add_observations(data)
