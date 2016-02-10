@@ -27,6 +27,7 @@ def crps(thresholds, predictions, actuals):
         For more on CRPS, see:
         http://www.eumetcal.org/resources/ukmeteocal/verification/www/english/msg/ver_prob_forec/uos3b/uos3b_ko1.htm
     """
+
     nthresh = len(thresholds)  # 70 in example
     ncases = len(predictions)
     mean_crps = 0

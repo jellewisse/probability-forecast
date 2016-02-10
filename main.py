@@ -123,6 +123,45 @@ def pipeline(element_id, issue, forecast_hour):
     return data
 
 
+def plot_rank_histogram(data, rank_column, bins=51):
+    """Plot Talagrand-histogram / verification-rank histogram of member
+    predictions."""
+    if rank_column not in data:
+        raise KeyError("No rank column present in data")
+    if data[rank_column].value_counts(dropna=False).loc[np.nan] == len(data):
+        raise IndexError("No data present in rank column")
+    data[rank_column].hist(bins=bins)
+
+
+def plot_verification_rank_histogram(data, bins=51):
+    plot_rank_histogram(data, '2T_OBS_RANK', bins)
+    plt.title("Verification-Rank histogram")
+    plt.xlabel("Observation rank")
+    plt.show()
+
+
+def plot_calibration_rank_histogram(data, bins=10):
+    plot_rank_histogram(data, '2T_ENSEMBLE_CDF', bins)
+    plt.xlabel("Observation CDF rank")
+    plt.xlim((0, 1))
+    plt.show()
+
+#
+# def plot_reliability_diagram(data, threshold):
+#     """
+#     data: dataframe
+#     threshold: pair of logical operator and number
+#     """
+#
+# # Example threshold: threshold = (operator.lt, 100)
+#
+# result = data.apply(
+#     foo
+#     axis=1,  # apply function to rows.
+# )
+# # TODO Continue here
+
+
 def plot_ensemble_pdfs():
     model_name = 'eps'
     element_id = '167'
@@ -157,7 +196,6 @@ def plot_ensemble_pdfs():
             fcst_range
         ))
         # Do plotting
-        import matplotlib.pyplot as plt
         plt.plot(fcst_range, pdf_vals)
         weights = np.ones_like(forecasts) / len(forecasts)
         plt.hist(forecasts, bins=10, weights=weights)
@@ -166,8 +204,33 @@ def plot_ensemble_pdfs():
         plt.ylabel('Probability')
         plt.show()
 
+
+def calculate_crps(data):
+    obs_col = '2T_OBS'
+    observations = data[obs_col].as_matrix()
+    member_cols = cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    ctrl_std = maximum_likelihood_std(data, '2T_CONTROL', obs_col)
+    ensemble_stds = np.repeat(ctrl_std, len(cols))
+    thresholds = np.arange(-30, 50, 1) + 273.15
+    forecasts = []
+    i = 1
+    for index, row in data.iterrows():
+        print("Row %d / %d" % (i, len(data)))
+        members = row[member_cols]
+        forecast = list(map(
+            lambda x: ensemble_cdf(x, norm.cdf, zip(members, ensemble_stds)),
+            thresholds
+        ))
+        forecasts.append(forecast)
+        import pdb
+        pdb.set_trace()
+        i += 1
+    from helpers import metrics
+    crps_val = metrics.crps(thresholds, forecasts, observations)
+    return crps_val
+
 # For testing purposes
 if __name__ == "__main__":
     # plot_ensemble_pdfs()
-    # data = main("control", "167", "0")
+    # data = pipeline("167", "0", 48)
     pass
