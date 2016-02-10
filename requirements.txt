@@ -1,5 +1,7 @@
-pandas==0.17.1
-pytest==2.8.1
-scipy==0.16.0
-numpy==1.10.1
-wheel==0.26.0
+matplotlib == 1.5.1
+numpy == 1.10.1
+pandas == 0.17.1
+pytest == 2.8.5
+scipy == 0.16.0
+setuptools == 18.2
+scikit_learn == 0.17
