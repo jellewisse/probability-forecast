@@ -1,9 +1,10 @@
 # main.py
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+import matplotlib.pyplot as plt
 
 # User modules
+from mixture_model.gaussian_mixture import GaussianMixtureModel
 from helpers.interpolation import nearest_grid_point_interpolate as intpl
 from helpers.data_assimilation import (
     load_and_interpolate_forecast,
@@ -11,45 +12,7 @@ from helpers.data_assimilation import (
 )
 
 
-def error_calculation(df, data_cols, obs_col):
-    X = df[data_cols].as_matrix()
-    y = df[obs_col].as_matrix()
-    # Numpy column-wise subtraction is expressed as row-wise subtraction.
-    E = (X.transpose() - y).transpose()
-    return E
-
-
-def maximum_likelihood_mean(df, data_cols, obs_col):
-    # Calculate errors
-    errors = error_calculation(df, data_cols, obs_col)
-    # Mean per column
-    return errors.mean(axis=0)
-
-
-def maximum_likelihood_std(df, data_cols, obs_col):
-    # Calculate errors
-    errors = error_calculation(df, data_cols, obs_col)
-    # Calculate maximum likelihood means per column
-    return errors.std(axis=0)
-
-
-def ensemble_pdf(x, pdf, member_params):
-    prob = 0.0
-    for (count, pdf_args) in enumerate(member_params):
-        prob += pdf(x, *pdf_args)
-    prob /= count
-    return prob
-
-
-def ensemble_cdf(x, cdf, member_params):
-    prob = 0.0
-    for (count, cdf_args) in enumerate(member_params):
-        prob += cdf(x, *cdf_args)
-    prob /= count
-    return prob
-
-
-def main(model_name, element_id, issue, forecast_hour=None):
+def load_curated_data(model_name, element_id, issue, forecast_hour=None):
     data = load_and_interpolate_forecast(intpl, model_name, element_id, issue)
     data = add_observations(data)
     if forecast_hour is not None:
@@ -59,8 +22,10 @@ def main(model_name, element_id, issue, forecast_hour=None):
 
 def pipeline(element_id, issue, forecast_hour):
     # 1. Load data from control and EPS
-    eps_data = main("eps", element_id, issue, forecast_hour)
-    ctrl_data = main("control", element_id, issue, forecast_hour)
+    eps_data = load_curated_data("eps", element_id, issue, forecast_hour)
+    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    obs_col = '2T_OBS'
+    ctrl_data = load_curated_data("control", element_id, issue, forecast_hour)
 
     # 2. Merge
     data = pd.DataFrame.merge(
@@ -79,8 +44,12 @@ def pipeline(element_id, issue, forecast_hour):
     valid_dates = data['valid_date'].unique()
     assert len(valid_dates) == len(data)
 
+    # Initialize model
+    model = GaussianMixtureModel(len(ens_cols))
+
     # # Moving window prediction
     for index, row in data.iterrows():
+        # Select data
         valid_date = row['valid_date']
         first_date = valid_date - pd.DateOffset(days=lag + train_days)
         last_date = valid_date - pd.DateOffset(days=lag)
@@ -96,22 +65,15 @@ def pipeline(element_id, issue, forecast_hour):
             continue
 
         # 4. Use train callback to train model parameters
-        ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-        ctrl_std = maximum_likelihood_std(train_data, '2T_CONTROL', '2T_OBS')
-        ensemble_stds = np.repeat(ctrl_std, len(ens_cols))
+        X = train_data[ens_cols].as_matrix()
+        y = train_data[obs_col].as_matrix()
+        model.fit(X, y)
 
         # 5. Use predict callback to predict model
         forecasts = row[ens_cols].as_matrix()
-        observation = row['2T_OBS']
-        data.loc[index, '2T_ENSEMBLE_MEAN'] = np.mean(forecasts)
-        data.loc[index, '2T_ENSEMBLE_PDF'] = \
-            ensemble_pdf(
-                row['2T_OBS'], norm.pdf, zip(forecasts, ensemble_stds)
-            )
-        data.loc[index, '2T_ENSEMBLE_CDF'] = \
-            ensemble_cdf(
-                row['2T_OBS'], norm.cdf, zip(forecasts, ensemble_stds)
-            )
+        observation = row[obs_col]
+        data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean(forecasts)
+        data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(row[obs_col], forecasts)
 
         obs_in_forecasts = list(forecasts) + list([observation])
         obs_in_forecasts.sort()
@@ -162,75 +124,75 @@ def plot_calibration_rank_histogram(data, bins=10):
 # # TODO Continue here
 
 
-def plot_ensemble_pdfs():
-    model_name = 'eps'
-    element_id = '167'
-    issue = '0'
+# def plot_ensemble_pdfs():
+#     model_name = 'eps'
+#     element_id = '167'
+#     issue = '0'
+#
+#     eps_data = main(model_name, element_id, issue)
+#     cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+#
+#     ctrl_data = main('control', element_id, issue)
+#     obs_col = '2T_OBS'
+#
+#     # Data for 48h forecast
+#     eps48 = eps_data[eps_data.forecast_hour == 48]
+#     ctrl48 = ctrl_data[ctrl_data.forecast_hour == 48]
+#
+#     # Ensemble parameter construction
+#     ctrl_std = maximum_likelihood_std(ctrl48, '2T_CONTROL', obs_col)
+#     ensemble_stds = np.repeat(ctrl_std, len(cols))
+#
+#     # Loop over multiple forecast days
+#     for row_nr in range(-5, 0):
+#         forecast_id = eps48.iloc[[row_nr], ].index[0]
+#         forecasts = eps48.loc[forecast_id, cols].as_matrix()
+#         # forecasts = np.random.normal(280, 2, 50)
+#         fcst_range = np.arange(
+#             np.floor(min(forecasts) - 2 * ctrl_std),
+#             np.ceil(max(forecasts) + 2 * ctrl_std),
+#             0.05
+#         )
+#         pdf_vals = list(map(
+#             lambda x: ensemble_pdf(x, norm.pdf, zip(forecasts, ensemble_stds)),
+#             fcst_range
+#         ))
+#         # Do plotting
+#         plt.plot(fcst_range, pdf_vals)
+#         weights = np.ones_like(forecasts) / len(forecasts)
+#         plt.hist(forecasts, bins=10, weights=weights)
+#         plt.title(str(eps48.loc[forecast_id, 'valid_date']))
+#         plt.xlabel('Temperature')
+#         plt.ylabel('Probability')
+#         plt.show()
 
-    eps_data = main(model_name, element_id, issue)
-    cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
 
-    ctrl_data = main('control', element_id, issue)
-    obs_col = '2T_OBS'
-
-    # Data for 48h forecast
-    eps48 = eps_data[eps_data.forecast_hour == 48]
-    ctrl48 = ctrl_data[ctrl_data.forecast_hour == 48]
-
-    # Ensemble parameter construction
-    ctrl_std = maximum_likelihood_std(ctrl48, '2T_CONTROL', obs_col)
-    ensemble_stds = np.repeat(ctrl_std, len(cols))
-
-    # Loop over multiple forecast days
-    for row_nr in range(-5, 0):
-        forecast_id = eps48.iloc[[row_nr], ].index[0]
-        forecasts = eps48.loc[forecast_id, cols].as_matrix()
-        # forecasts = np.random.normal(280, 2, 50)
-        fcst_range = np.arange(
-            np.floor(min(forecasts) - 2 * ctrl_std),
-            np.ceil(max(forecasts) + 2 * ctrl_std),
-            0.05
-        )
-        pdf_vals = list(map(
-            lambda x: ensemble_pdf(x, norm.pdf, zip(forecasts, ensemble_stds)),
-            fcst_range
-        ))
-        # Do plotting
-        plt.plot(fcst_range, pdf_vals)
-        weights = np.ones_like(forecasts) / len(forecasts)
-        plt.hist(forecasts, bins=10, weights=weights)
-        plt.title(str(eps48.loc[forecast_id, 'valid_date']))
-        plt.xlabel('Temperature')
-        plt.ylabel('Probability')
-        plt.show()
-
-
-def calculate_crps(data):
-    obs_col = '2T_OBS'
-    observations = data[obs_col].as_matrix()
-    member_cols = cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-    ctrl_std = maximum_likelihood_std(data, '2T_CONTROL', obs_col)
-    ensemble_stds = np.repeat(ctrl_std, len(cols))
-    thresholds = np.arange(-30, 50, 1) + 273.15
-    forecasts = []
-    i = 1
-    for index, row in data.iterrows():
-        print("Row %d / %d" % (i, len(data)))
-        members = row[member_cols]
-        forecast = list(map(
-            lambda x: ensemble_cdf(x, norm.cdf, zip(members, ensemble_stds)),
-            thresholds
-        ))
-        forecasts.append(forecast)
-        import pdb
-        pdb.set_trace()
-        i += 1
-    from helpers import metrics
-    crps_val = metrics.crps(thresholds, forecasts, observations)
-    return crps_val
+# def calculate_crps(data):
+#     obs_col = '2T_OBS'
+#     observations = data[obs_col].as_matrix()
+#     member_cols = cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+#     ctrl_std = maximum_likelihood_std(data, '2T_CONTROL', obs_col)
+#     ensemble_stds = np.repeat(ctrl_std, len(cols))
+#     thresholds = np.arange(-30, 50, 1) + 273.15
+#     forecasts = []
+#     i = 1
+#     for index, row in data.iterrows():
+#         print("Row %d / %d" % (i, len(data)))
+#         members = row[member_cols]
+#         forecast = list(map(
+#             lambda x: ensemble_cdf(x, norm.cdf, zip(members, ensemble_stds)),
+#             thresholds
+#         ))
+#         forecasts.append(forecast)
+#         import pdb
+#         pdb.set_trace()
+#         i += 1
+#     from helpers import metrics
+#     crps_val = metrics.crps(thresholds, forecasts, observations)
+#     return crps_val
 
 # For testing purposes
 if __name__ == "__main__":
     # plot_ensemble_pdfs()
-    # data = pipeline("167", "0", 48)
-    pass
+    data = pipeline("167", "0", 48)
+    # pass
