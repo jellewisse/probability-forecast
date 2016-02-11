@@ -10,6 +10,7 @@ from helpers.data_assimilation import (
     load_and_interpolate_forecast,
     add_observations
 )
+from helpers import metrics
 
 
 def load_curated_data(model_name, element_id, issue, forecast_hour=None):
@@ -37,12 +38,13 @@ def pipeline(element_id, issue, forecast_hour):
 
     # 3. Split of first X days as training, keep the rest as test
     train_days = 40
-    # nr_days = len(data['valid_date'].unique())
 
     # The dates to predict for
     lag = np.ceil(forecast_hour / 24)
     valid_dates = data['valid_date'].unique()
     assert len(valid_dates) == len(data)
+    # Prediction intervals
+    thresholds = np.arange(-30, 30, 1) + 273.15
 
     # Initialize model
     model = GaussianMixtureModel(len(ens_cols))
@@ -71,17 +73,21 @@ def pipeline(element_id, issue, forecast_hour):
 
         # 5. Use predict callback to predict model
         forecasts = row[ens_cols].as_matrix()
+        forecast_threshold_cdfs = model.cdf(thresholds, forecasts)
         observation = row[obs_col]
         data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean(forecasts)
         data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(row[obs_col], forecasts)
+        data.loc[index, '2T_CRPS'] = \
+            metrics.crps(thresholds, forecast_threshold_cdfs, observation)
 
+        # For determining the ensemble verification rank / calibration
         obs_in_forecasts = list(forecasts) + list([observation])
         obs_in_forecasts.sort()
         obs_rank = obs_in_forecasts.index(observation)
         data.loc[index, '2T_OBS_RANK'] = obs_rank
 
     # 6. Use verify callback to call verification methods
-    # TODO
+    do_verification(data)
     return data
 
 
@@ -108,7 +114,25 @@ def plot_calibration_rank_histogram(data, bins=10):
     plt.xlim((0, 1))
     plt.show()
 
-#
+
+def plot_lead_time_gain(data):
+    # TODO Plot performance error as function of lead time and Calculate
+    # difference in lead time.
+    pass
+
+
+def plot_all_points(data):
+    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    ens_data = data[ens_cols].as_matrix()
+    obs_data = np.tile(data['2T_OBS'].as_matrix(), (50, 1)).transpose()
+    plt.scatter(x=obs_data.flatten(), y=ens_data.flatten())
+    plt.xlabel("Observed temperature")
+    plt.ylabel("Predicted temperature")
+    plt.title("All data points")
+    plt.grid()
+    plt.show()
+
+
 # def plot_reliability_diagram(data, threshold):
 #     """
 #     data: dataframe
@@ -123,6 +147,14 @@ def plot_calibration_rank_histogram(data, bins=10):
 # )
 # # TODO Continue here
 
+
+def do_verification(data):
+    plot_verification_rank_histogram(data)
+    plot_calibration_rank_histogram(data)
+    mean_crps = data['2T_CRPS'].mean()
+    print("Mean CRPS: %f" % (mean_crps))
+    deterministic_MAE = abs(data['2T_ENSEMBLE_MEAN'] - data['2T_OBS']).mean()
+    print("Ensemble mean MAE: %f" % (deterministic_MAE))
 
 # def plot_ensemble_pdfs():
 #     model_name = 'eps'
@@ -154,8 +186,8 @@ def plot_calibration_rank_histogram(data, bins=10):
 #             0.05
 #         )
 #         pdf_vals = list(map(
-#             lambda x: ensemble_pdf(x, norm.pdf, zip(forecasts, ensemble_stds)),
-#             fcst_range
+#           lambda x: ensemble_pdf(x, norm.pdf, zip(forecasts, ensemble_stds)),
+#           fcst_range
 #         ))
 #         # Do plotting
 #         plt.plot(fcst_range, pdf_vals)
@@ -166,30 +198,6 @@ def plot_calibration_rank_histogram(data, bins=10):
 #         plt.ylabel('Probability')
 #         plt.show()
 
-
-# def calculate_crps(data):
-#     obs_col = '2T_OBS'
-#     observations = data[obs_col].as_matrix()
-#     member_cols = cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-#     ctrl_std = maximum_likelihood_std(data, '2T_CONTROL', obs_col)
-#     ensemble_stds = np.repeat(ctrl_std, len(cols))
-#     thresholds = np.arange(-30, 50, 1) + 273.15
-#     forecasts = []
-#     i = 1
-#     for index, row in data.iterrows():
-#         print("Row %d / %d" % (i, len(data)))
-#         members = row[member_cols]
-#         forecast = list(map(
-#             lambda x: ensemble_cdf(x, norm.cdf, zip(members, ensemble_stds)),
-#             thresholds
-#         ))
-#         forecasts.append(forecast)
-#         import pdb
-#         pdb.set_trace()
-#         i += 1
-#     from helpers import metrics
-#     crps_val = metrics.crps(thresholds, forecasts, observations)
-#     return crps_val
 
 # For testing purposes
 if __name__ == "__main__":
