@@ -28,8 +28,6 @@ def crps(thresholds, case, actual):
             crps += (fprob - oprob) * (fprob - oprob)
     else:
         print("Warning: bad CDF provided.")
-        import pdb
-        pdb.set_trace()
         crps += len(thresholds)  # treat delta at each threshold as 1
     crps /= len(thresholds)
     return crps
