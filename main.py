@@ -73,15 +73,20 @@ def pipeline(element_id, issue, forecast_hour):
 
         # 5. Use predict callback to predict model
         forecasts = row[ens_cols].as_matrix()
-        forecast_threshold_cdfs = model.cdf(thresholds, forecasts)
+        model.set_member_means(forecasts)
+
         observation = row[obs_col]
-        data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean(forecasts)
-        data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(row[obs_col], forecasts)
+        forecast_threshold_cdfs = model.cdf(thresholds)
+
+        data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
+        data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(observation)
         data.loc[index, '2T_CRPS'] = \
             metrics.crps(thresholds, forecast_threshold_cdfs, observation)
 
         # For determining the ensemble verification rank / calibration
-        obs_in_forecasts = list(forecasts) + list([observation])
+        # Rank only makes sense if the ensemble weights are uniformly
+        # distributed.
+        obs_in_forecasts = list(model.get_member_means()) + list([observation])
         obs_in_forecasts.sort()
         obs_rank = obs_in_forecasts.index(observation)
         data.loc[index, '2T_OBS_RANK'] = obs_rank
