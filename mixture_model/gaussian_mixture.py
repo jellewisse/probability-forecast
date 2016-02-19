@@ -89,6 +89,14 @@ class GaussianMixtureModel:
         if not self._forecast_prepared:
             raise AttributeError("No ensemble values available for dressing.")
 
+    def pdf(self, x):
+        self._check_member_means()
+        return sum([
+            member.pdf(x) * weight
+            for (member, weight)
+            in zip(self._members, self.weights)
+        ])
+
     def cdf(self, x):
         self._check_member_means()
         return sum([

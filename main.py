@@ -1,6 +1,8 @@
 # main.py
 import numpy as np
 import pandas as pd
+import operator as op
+from math import isnan
 import matplotlib.pyplot as plt
 
 # User modules
@@ -12,44 +14,62 @@ from helpers.data_assimilation import (
 )
 from helpers import metrics
 
+THRESHOLD = 10
 
-def load_curated_data(model_name, element_id, issue, forecast_hour=None):
+
+def load_model_data(model_name, element_id, issue, forecast_hour=None):
     data = load_and_interpolate_forecast(intpl, model_name, element_id, issue)
-    data = add_observations(data)
+
     if forecast_hour is not None:
         data = data[data.forecast_hour == forecast_hour]
     return data
 
 
-def pipeline(element_id, issue, forecast_hour):
-    # 1. Load data from control and EPS
-    eps_data = load_curated_data("eps", element_id, issue, forecast_hour)
-    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-    obs_col = '2T_OBS'
-    ctrl_data = load_curated_data("control", element_id, issue, forecast_hour)
+def load_data(
+    element_id, issue, forecast_hour=None, models=["eps", "control", "fc"]
+):
+    # Load data from control and EPS
+    data = pd.DataFrame()
+    for model in models:
+        model_data = \
+            load_model_data(model, element_id, issue, forecast_hour)
 
-    # 2. Merge
-    data = pd.DataFrame.merge(
-        eps_data, ctrl_data,
-        copy=False
-    )
+        if data.empty:
+            data = model_data
+        else:
+            data = pd.merge(data, model_data, copy=False, how='outer')
+    data = add_observations(data)
     data.sort_values('valid_date', ascending=True, inplace=True)
-    del(eps_data, ctrl_data)
+    return data
 
-    # 3. Split of first X days as training, keep the rest as test
-    train_days = 40
+
+def clean_data(data):
+    data.dropna(axis=0, how='any', inplace=True)
+
+
+def pipeline(element_id, issue, forecast_hour):
+
+    # ensemble definition
+    model_names = ["eps", "control", "fc"]
+    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    ens_cols.append('2T_CONTROL')
+    ens_cols.append('2T_FC')
+    obs_col = '2T_OBS'
+    model = GaussianMixtureModel(len(ens_cols))
+
+    # Load data
+    data = load_data(element_id, issue, forecast_hour, model_names)
+    clean_data(data)
 
     # The dates to predict for
+    train_days = 40
     lag = np.ceil(forecast_hour / 24)
     valid_dates = data['valid_date'].unique()
     assert len(valid_dates) == len(data)
     # Prediction intervals
     thresholds = np.arange(-30, 30, 1) + 273.15
 
-    # Initialize model
-    model = GaussianMixtureModel(len(ens_cols))
-
-    # # Moving window prediction
+    # Moving window prediction
     for index, row in data.iterrows():
         # Select data
         valid_date = row['valid_date']
@@ -78,7 +98,10 @@ def pipeline(element_id, issue, forecast_hour):
         observation = row[obs_col]
         forecast_threshold_cdfs = model.cdf(thresholds)
 
+        data.loc[index, '2T_BELOW_DEGREE_PROB'] = model.cdf(273.15 + THRESHOLD)
+
         data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
+        data.loc[index, '2T_ENSEMBLE_PDF'] = model.pdf(observation)
         data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(observation)
         data.loc[index, '2T_CRPS'] = \
             metrics.crps(thresholds, forecast_threshold_cdfs, observation)
@@ -91,9 +114,82 @@ def pipeline(element_id, issue, forecast_hour):
         obs_rank = obs_in_forecasts.index(observation)
         data.loc[index, '2T_OBS_RANK'] = obs_rank
 
+        # import pdb
+        # pdb.set_trace()
+        # plot_distribution(model, observation, valid_date)
     # 6. Use verify callback to call verification methods
-    do_verification(data)
+    # do_verification(data)
+    # plot_reliability_diagram(data)
     return data
+
+
+def get_bins(nr_bins, left_lim=0, right_lim=1):
+    assert left_lim < right_lim
+    assert nr_bins >= 2
+    bin_width = (right_lim - left_lim) / nr_bins
+    half_bin = bin_width / 2
+    bin_centers = np.arange(half_bin + left_lim, right_lim, bin_width)
+    bin_edges = np.append(left_lim, bin_centers + half_bin)
+    # bin_centers = np.arange(left_lim, right_lim + bin_width, bin_width)
+    return bin_centers, bin_edges, bin_width
+
+
+def calculate_threshold_hits(data, nr_bins=11):
+    bin_centers, bin_edges, bin_width = get_bins(nr_bins, -0.05, 1.05)
+    # TODO Hard-coded single threshold
+    threshold = (op.le, 273.15 + THRESHOLD)
+    threshold_col = '2T_BELOW_DEGREE_PROB'
+    # Hard-coded column names
+    obs_col = '2T_OBS'
+    # Counting tables
+    prob_count = np.zeros(nr_bins)
+    prob_hits = np.zeros(nr_bins)
+    nr_rows = 0
+    # For each record
+    for index, row in data.iterrows():
+        observation = row[obs_col]
+        threshold_prob = row[threshold_col]
+        # Check quality
+        if isnan(threshold_prob) or isnan(observation):
+            continue
+        # Bin probability
+        threshold_prob_bin = \
+            np.digitize(threshold_prob, bin_edges, right=True) - 1
+        prob_count[threshold_prob_bin] += 1
+        # Threshold is fulfilled.
+        if threshold[0](observation, threshold[1]):
+            prob_hits[threshold_prob_bin] += 1
+        nr_rows += 1
+    prob_hits /= nr_rows
+    return bin_centers, prob_hits, prob_count
+
+
+def plot_relialibilty_sharpness_diagram(bin_centers, prob_hits, prob_count):
+    # Figure plotting
+    f, (ax1, ax2) = plt.subplots(2, figsize=(8, 10))
+    # Reliability diagram ploting
+    ax1.plot(bin_centers, prob_hits, marker='o')
+    ax1.legend(["Model"])
+    # plot dashed diagonal
+    ax1.plot([0, 1], [0, 1], linestyle='--')
+    ax1.set_ylabel("Observed frequency")
+    ax1.set_xlim((-0.2, 1.2))
+    ax1.set_ylim((0, 1))
+    ax1.grid(True)
+    ax1.set_title("Reliability diagram")
+    # plot sharpness diagram
+    mean_bin_width = (bin_centers[-1] - bin_centers[0]) / len(bin_centers)
+    ax2.bar(
+        bin_centers - (mean_bin_width / 2),
+        prob_count,
+        mean_bin_width * 0.9
+    )
+    ax2.set_xlim((-0.2, 1.2))
+    ax2.grid(True)
+    ax2.set_xlabel("Forecast probability")
+    ax2.set_ylabel("Forecast frequency")
+    ax2.set_title("Sharpness diagram")
+    plt.show()
 
 
 def plot_rank_histogram(data, rank_column, bins=51):
@@ -106,24 +202,34 @@ def plot_rank_histogram(data, rank_column, bins=51):
     data[rank_column].hist(bins=bins)
 
 
-def plot_verification_rank_histogram(data, bins=51):
+def plot_verification_rank_histogram(data, bins=None):
+    if bins is None:
+        ranks = data['2T_OBS_RANK'].dropna().unique()
+        bins = max(ranks)
+        xlims = (0, bins)
+    else:
+        xlims = (0, bins)
     plot_rank_histogram(data, '2T_OBS_RANK', bins)
     plt.title("Verification-Rank histogram")
     plt.xlabel("Observation rank")
+    plt.xlim(xlims)
     plt.show()
 
 
-def plot_calibration_rank_histogram(data, bins=10):
+def plot_PIT_histogram(data, bins=51):
     plot_rank_histogram(data, '2T_ENSEMBLE_CDF', bins)
-    plt.xlabel("Observation CDF rank")
+    plt.xlabel("Forecast CDF")
     plt.xlim((0, 1))
+    plt.title("PIT-Historam (CDF Histogram)")
     plt.show()
 
 
-def plot_lead_time_gain(data):
-    # TODO Plot performance error as function of lead time and Calculate
-    # difference in lead time.
-    pass
+def plot_sharpness_histogram(data, bins=np.arange(0, 1, 0.1)):
+    plot_rank_histogram(data, '2T_ENSEMBLE_PDF', bins)
+    plt.xlabel("Forecast probability")
+    plt.xlim((0, 1))
+    plt.title("Sharpness-Histogram (PDF Histogram)")
+    plt.show()
 
 
 def plot_all_points(data):
@@ -138,74 +244,63 @@ def plot_all_points(data):
     plt.show()
 
 
-# def plot_reliability_diagram(data, threshold):
-#     """
-#     data: dataframe
-#     threshold: pair of logical operator and number
-#     """
-#
-# # Example threshold: threshold = (operator.lt, 100)
-#
-# result = data.apply(
-#     foo
-#     axis=1,  # apply function to rows.
-# )
-# # TODO Continue here
+def plot_distribution(model, observation, forecast_date=None):
+
+    forecast_means = np.array(model.get_member_means())
+    thresholds = np.arange(
+        np.floor(min(forecast_means) - 5),
+        np.ceil(max(forecast_means) + 5),
+        0.05
+    )
+
+    forecast_pdf = model.pdf(thresholds)
+    forecast_cdf = model.cdf(thresholds)
+
+    f, (ax1, ax2) = plt.subplots(2, sharex=True)
+
+    # Plot model marginal pdf
+    ax1.plot(thresholds, forecast_pdf, "blue", label="Model")
+
+    # Plot observation
+    ax1.plot(
+        [observation, observation], [0, max(forecast_pdf)],
+        "black",
+        label="Observation",
+        lw=3
+    )
+
+    ax1.legend(["Model", "Observation"])
+    ax1.set_title("PDF for date %s" % str(forecast_date))
+    ax1.set_xlim((thresholds[0], thresholds[-1]))
+
+    # Plot cdf
+    ax2.plot(thresholds, forecast_cdf, "blue")
+    # Plot observation
+    ax2.plot(
+        [observation, observation], [0, 0.8],
+        "black",
+        label="Observation",
+        lw=3
+    )
+    ax2.set_ylim((0, 1.1))
+    ax2.set_title("CDF for date %s" % str(forecast_date))
+    ax2.set_xlabel("Temperature")
+    plt.show()
 
 
 def do_verification(data):
     plot_verification_rank_histogram(data)
-    plot_calibration_rank_histogram(data)
+    plot_PIT_histogram(data)
+    plot_sharpness_histogram(data)
     mean_crps = data['2T_CRPS'].mean()
     print("Mean CRPS: %f" % (mean_crps))
     deterministic_MAE = abs(data['2T_ENSEMBLE_MEAN'] - data['2T_OBS']).mean()
     print("Ensemble mean MAE: %f" % (deterministic_MAE))
 
-# def plot_ensemble_pdfs():
-#     model_name = 'eps'
-#     element_id = '167'
-#     issue = '0'
-#
-#     eps_data = main(model_name, element_id, issue)
-#     cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-#
-#     ctrl_data = main('control', element_id, issue)
-#     obs_col = '2T_OBS'
-#
-#     # Data for 48h forecast
-#     eps48 = eps_data[eps_data.forecast_hour == 48]
-#     ctrl48 = ctrl_data[ctrl_data.forecast_hour == 48]
-#
-#     # Ensemble parameter construction
-#     ctrl_std = maximum_likelihood_std(ctrl48, '2T_CONTROL', obs_col)
-#     ensemble_stds = np.repeat(ctrl_std, len(cols))
-#
-#     # Loop over multiple forecast days
-#     for row_nr in range(-5, 0):
-#         forecast_id = eps48.iloc[[row_nr], ].index[0]
-#         forecasts = eps48.loc[forecast_id, cols].as_matrix()
-#         # forecasts = np.random.normal(280, 2, 50)
-#         fcst_range = np.arange(
-#             np.floor(min(forecasts) - 2 * ctrl_std),
-#             np.ceil(max(forecasts) + 2 * ctrl_std),
-#             0.05
-#         )
-#         pdf_vals = list(map(
-#           lambda x: ensemble_pdf(x, norm.pdf, zip(forecasts, ensemble_stds)),
-#           fcst_range
-#         ))
-#         # Do plotting
-#         plt.plot(fcst_range, pdf_vals)
-#         weights = np.ones_like(forecasts) / len(forecasts)
-#         plt.hist(forecasts, bins=10, weights=weights)
-#         plt.title(str(eps48.loc[forecast_id, 'valid_date']))
-#         plt.xlabel('Temperature')
-#         plt.ylabel('Probability')
-#         plt.show()
-
 
 # For testing purposes
 if __name__ == "__main__":
     # plot_ensemble_pdfs()
-    data = pipeline("167", "0", 48)
-    # pass
+    data = pipeline("167", "0", 72)
+    a, b, c = calculate_threshold_hits(data)
+    plot_relialibilty_sharpness_diagram(a, b, c)
