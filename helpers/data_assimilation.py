@@ -156,7 +156,7 @@ def add_observations(forecast_data):
 
 
 @cache
-def load_data(element_id=167, issue="0", model_names=["eps", "control", "fc"]):
+def load_data(element_id, issue, model_names):
     """"""
     # Load data for specific models
     data = pd.DataFrame()
