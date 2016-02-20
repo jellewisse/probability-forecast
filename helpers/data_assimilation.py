@@ -1,6 +1,5 @@
 # data_assimilation.py
 import pandas as pd
-import pyfscache
 
 # User modules
 from helpers import data_readers
@@ -8,10 +7,6 @@ from helpers.interpolation import (
     interpolate,
     nearest_grid_point_interpolate as intpl
 )
-
-# Configure cache
-CACHE_DIR = '.cache'
-cache = pyfscache.FSCache(CACHE_DIR)
 
 
 # TODO Test
@@ -155,7 +150,6 @@ def add_observations(forecast_data):
     )
 
 
-@cache
 def load_data(element_id, issue, model_names):
     """"""
     # Load data for specific models

@@ -19,24 +19,19 @@ CACHE_DIR = '.cache'
 cache = pyfscache.FSCache(CACHE_DIR)
 
 
-def clean_data(data):
-    data.dropna(axis=0, how='any', inplace=True)
-
-
-# @cache
-def cached_load_data(**kwargs):
-    return load_data(**kwargs)
-
-
-# @cache
-def cached_load_forecast_hour_data(forecast_hour, **kwargs):
-    data = cached_load_data(**kwargs)
-    data = data[data.forecast_hour == forecast_hour]
-    clean_data(data)
-    return data
+@cache
+def cached_load_data(*args):
+    return load_data(*args)
 
 
 @cache
+def cached_load_forecast_hour_data(forecast_hour, *args):
+    data = cached_load_data(*args)
+    data = data[data.forecast_hour == forecast_hour]
+    data = data.dropna(axis=0, how='any')
+    return data
+
+
 def pipeline(element_id, issue, forecast_hour):
 
     # ensemble definition
@@ -49,9 +44,9 @@ def pipeline(element_id, issue, forecast_hour):
 
     data = cached_load_forecast_hour_data(
         forecast_hour,
-        element_id=element_id,
-        issue=issue,
-        model_names=model_names
+        element_id,
+        issue,
+        model_names
     )
 
     # The dates to predict for
@@ -294,6 +289,8 @@ def do_verification(data):
 # For testing purposes
 if __name__ == "__main__":
     # plot_ensemble_pdfs()
-    data = pipeline("167", "0", 72)
+    # import pdb
+    # pdb.set_trace()
+    data = pipeline("167", "0", 48)
     # a, b, c = calculate_threshold_hits(data)
     # plot_relialibilty_sharpness_diagram(a, b, c)
