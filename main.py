@@ -24,17 +24,13 @@ def cached_load_data(*args):
     return load_data(*args)
 
 
-@cache
-def cached_load_forecast_hour_data(forecast_hour, *args):
-    data = cached_load_data(*args)
-    data = data[data.forecast_hour == forecast_hour]
-    data = data.dropna(axis=0, how='any')
-    return data
+def _calculate_lag(forecast_hour):
+    return np.ceil(forecast_hour / 24)
 
 
-def pipeline(element_id, issue, forecast_hour):
+def pipeline(element_id, issue, forecast_hours):
 
-    # ensemble definition
+    # Ensemble definition
     model_names = ["eps", "control", "fc"]
     ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
     ens_cols.append('2T_CONTROL')
@@ -42,73 +38,74 @@ def pipeline(element_id, issue, forecast_hour):
     obs_col = '2T_OBS'
     model = GaussianMixtureModel(len(ens_cols))
 
-    data = cached_load_forecast_hour_data(
-        forecast_hour,
+    # Load data
+    full_data = cached_load_data(
         element_id,
         issue,
         model_names
     )
+    for count, forecast_hour in enumerate(forecast_hours):
+        print("Processing %d / %d forecast hours." %
+              (count+1, len(forecast_hours)))
+        data = full_data[full_data.forecast_hour == forecast_hour]
+        # TODO Write results to other dataframe than original data
+        # The dates to predict for
+        train_days = 40
+        lag = _calculate_lag(forecast_hour)
+        valid_dates = data['valid_date'].unique()
+        assert len(valid_dates) == len(data), \
+            "Each valid date should only have a single prediction"
+        # Prediction intervals
+        thresholds = np.arange(-30, 30, 1) + 273.15
 
-    # The dates to predict for
-    train_days = 40
-    lag = np.ceil(forecast_hour / 24)
-    valid_dates = data['valid_date'].unique()
-    assert len(valid_dates) == len(data)
-    # Prediction intervals
-    thresholds = np.arange(-30, 30, 1) + 273.15
+        # Moving window prediction
+        for index, row in data.iterrows():
+            # Select data
+            valid_date = row['valid_date']
+            first_date = valid_date - pd.DateOffset(days=lag + train_days)
+            last_date = valid_date - pd.DateOffset(days=lag)
+            # TODO Selection might be expensive.
+            # Alternative is to indexing first
+            train_data = data[
+                (data.valid_date <= last_date) & (data.valid_date > first_date)
+            ]
+            if len(train_data) < train_days:
+                # Not enough training days
+                # print("Skipping valid date ", str(row['valid_date']))
+                continue
+            X_train = train_data[ens_cols].as_matrix()
+            y_train = train_data[obs_col].as_matrix()
+            X_test = row[ens_cols].as_matrix()
+            y_test = row[obs_col]
 
-    # Moving window prediction
-    for index, row in data.iterrows():
-        # Select data
-        valid_date = row['valid_date']
-        first_date = valid_date - pd.DateOffset(days=lag + train_days)
-        last_date = valid_date - pd.DateOffset(days=lag)
+            # Train
+            model.fit(X_train, y_train)
 
-        # TODO Selection might be expensive. Alternative is to indexing first
-        train_data = data[
-            (data.valid_date <= last_date) & (data.valid_date > first_date)
-        ]
+            # Predict
+            model.set_member_means(X_test)
 
-        if len(train_data) < train_days:
-            # Not enough training days
-            print("Skipping valid date ", str(row['valid_date']))
-            continue
+            # Verify
+            full_data.loc[index, '2T_BELOW_DEGREE_PROB'] = \
+                model.cdf(273.15 + THRESHOLD)
+            full_data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
+            full_data.loc[index, '2T_ENSEMBLE_PDF'] = model.pdf(y_test)
+            full_data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(y_test)
+            full_data.loc[index, '2T_CRPS'] = \
+                metrics.crps(thresholds, model.cdf(thresholds), y_test)
 
-        # 4. Use train callback to train model parameters
-        X = train_data[ens_cols].as_matrix()
-        y = train_data[obs_col].as_matrix()
-        model.fit(X, y)
+            # For determining the ensemble verification rank / calibration
+            # Rank only makes sense if the ensemble weights are uniformly
+            # distributed.
+            obs_in_forecasts = list(model.get_member_means()) + list([y_test])
+            obs_in_forecasts.sort()
+            full_data.loc[index, '2T_OBS_RANK'] = \
+                obs_in_forecasts.index(y_test)
+            # plot_distribution(model, observation, valid_date)
 
-        # 5. Use predict callback to predict model
-        forecasts = row[ens_cols].as_matrix()
-        model.set_member_means(forecasts)
-
-        observation = row[obs_col]
-        forecast_threshold_cdfs = model.cdf(thresholds)
-
-        data.loc[index, '2T_BELOW_DEGREE_PROB'] = model.cdf(273.15 + THRESHOLD)
-
-        data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
-        data.loc[index, '2T_ENSEMBLE_PDF'] = model.pdf(observation)
-        data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(observation)
-        data.loc[index, '2T_CRPS'] = \
-            metrics.crps(thresholds, forecast_threshold_cdfs, observation)
-
-        # For determining the ensemble verification rank / calibration
-        # Rank only makes sense if the ensemble weights are uniformly
-        # distributed.
-        obs_in_forecasts = list(model.get_member_means()) + list([observation])
-        obs_in_forecasts.sort()
-        obs_rank = obs_in_forecasts.index(observation)
-        data.loc[index, '2T_OBS_RANK'] = obs_rank
-
-        # import pdb
-        # pdb.set_trace()
-        # plot_distribution(model, observation, valid_date)
     # 6. Use verify callback to call verification methods
     # do_verification(data)
     # plot_reliability_diagram(data)
-    return data
+    return full_data
 
 
 def get_bins(nr_bins, left_lim=0, right_lim=1):
@@ -122,21 +119,23 @@ def get_bins(nr_bins, left_lim=0, right_lim=1):
     return bin_centers, bin_edges, bin_width
 
 
+def _check_threshold(threshold, value):
+    """Threshold is a boolean operator - value tuple."""
+    return threshold[0](value, threshold[1])
+
+
 def calculate_threshold_hits(data, nr_bins=11):
     bin_centers, bin_edges, _ = get_bins(nr_bins, -0.05, 1.05)
     # TODO Hard-coded single threshold
     threshold = (op.le, 273.15 + THRESHOLD)
-    threshold_col = '2T_BELOW_DEGREE_PROB'
-    # Hard-coded column names
-    obs_col = '2T_OBS'
     # Counting tables
     prob_count = np.zeros(nr_bins)
     prob_hits = np.zeros(nr_bins)
     nr_rows = 0
     # For each record
     for _, row in data.iterrows():
-        observation = row[obs_col]
-        threshold_prob = row[threshold_col]
+        observation = row['2T_OBS']
+        threshold_prob = row['2T_BELOW_DEGREE_PROB']
         # Check quality
         if isnan(threshold_prob) or isnan(observation):
             continue
@@ -276,21 +275,30 @@ def plot_distribution(model, observation, forecast_date=None):
     plt.show()
 
 
-def do_verification(data):
-    plot_verification_rank_histogram(data)
-    plot_PIT_histogram(data)
-    plot_sharpness_histogram(data)
-    mean_crps = data['2T_CRPS'].mean()
+def get_hourly_values(data, column, forecast_hours):
+    values = [0] * len(forecast_hours)
+    for count, forecast_hour in enumerate(forecast_hours):
+        hourly_data = data[data.forecast_hour == forecast_hour]
+        values[count] = hourly_data[column].mean()
+    return values
+
+
+def do_verification(data, forecast_hour):
+    hourly_data = data[data.forecast_hour == forecast_hour]
+    plot_verification_rank_histogram(hourly_data)
+    plot_PIT_histogram(hourly_data)
+    plot_sharpness_histogram(hourly_data)
+    a, b, c = calculate_threshold_hits(hourly_data)
+    plot_relialibilty_sharpness_diagram(a, b, c)
+    mean_crps = hourly_data['2T_CRPS'].mean()
     print("Mean CRPS: %f" % (mean_crps))
-    deterministic_MAE = abs(data['2T_ENSEMBLE_MEAN'] - data['2T_OBS']).mean()
+    deterministic_MAE = \
+        abs(hourly_data['2T_ENSEMBLE_MEAN'] - hourly_data['2T_OBS']).mean()
     print("Ensemble mean MAE: %f" % (deterministic_MAE))
 
 
 # For testing purposes
 if __name__ == "__main__":
-    # plot_ensemble_pdfs()
-    # import pdb
-    # pdb.set_trace()
-    data = pipeline("167", "0", 48)
-    # a, b, c = calculate_threshold_hits(data)
-    # plot_relialibilty_sharpness_diagram(a, b, c)
+    forecast_hours = range(0, 12)
+    data = pipeline("167", "0", forecast_hours)
+    

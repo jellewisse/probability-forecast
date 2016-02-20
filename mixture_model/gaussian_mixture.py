@@ -67,9 +67,9 @@ class GaussianMixtureModel(object):
             member.parameters['scale'] = model_std
             member.bias = model_bias
 
-        print("Fit model with simple dressing")
-        print("Scale: %f" % model_std)
-        print("Bias:  %f" % model_bias)
+        # print("Fit model with simple dressing")
+        # print("Scale: %f" % model_std)
+        # print("Bias:  %f" % model_bias)
 
     def set_member_means(self, member_means):
         assert len(member_means) == self.member_count
