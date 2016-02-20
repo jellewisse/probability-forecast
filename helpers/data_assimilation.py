@@ -1,9 +1,17 @@
 # data_assimilation.py
-from helpers import data_readers
 import pandas as pd
+import pyfscache
 
 # User modules
-from helpers.interpolation import interpolate
+from helpers import data_readers
+from helpers.interpolation import (
+    interpolate,
+    nearest_grid_point_interpolate as intpl
+)
+
+# Configure cache
+CACHE_DIR = '.cache'
+cache = pyfscache.FSCache(CACHE_DIR)
 
 
 # TODO Test
@@ -140,8 +148,25 @@ def load_and_interpolate_forecast(interpolation_func,
 
 
 def add_observations(forecast_data):
-
+    """"""
     return pd.DataFrame.merge(
         forecast_data, data_readers.read_observations(),
         copy=False
     )
+
+
+@cache
+def load_data(element_id=167, issue="0", model_names=["eps", "control", "fc"]):
+    """"""
+    # Load data for specific models
+    data = pd.DataFrame()
+    for model_name in model_names:
+        model_data = \
+            load_and_interpolate_forecast(intpl, model_name, element_id, issue)
+        if data.empty:
+            data = model_data
+        else:
+            data = pd.merge(data, model_data, copy=False, how='outer')
+    data = add_observations(data)
+    data.sort_values('valid_date', ascending=True, inplace=True)
+    return data

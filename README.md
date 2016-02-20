@@ -2,6 +2,17 @@
 [![Build Status](https://travis-ci.org/tomderuijter/probability-forecast.svg?branch=master)](https://travis-ci.org/tomderuijter/probability-forecast)
 [![Code Health](https://landscape.io/github/tomderuijter/probability-forecast/master/landscape.svg?style=flat)](https://landscape.io/github/tomderuijter/probability-forecast/master)
 
+## Dependencies
+Dependencies are included in requirements.txt.
+Install with ```pip install -r requirements.txt```.
+
+Additionally, one of the dependencies is not yet included in the PyPI for Python
+3. Install it through:
+
+```
+pip install git+https://github.com/vanife/pyfscache
+```
+
 ## Verification
 - Rank histograms
 - Skill scores

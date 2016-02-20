@@ -1,4 +1,5 @@
 # main.py
+import pyfscache
 import numpy as np
 import pandas as pd
 import operator as op
@@ -7,46 +8,35 @@ import matplotlib.pyplot as plt
 
 # User modules
 from mixture_model.gaussian_mixture import GaussianMixtureModel
-from helpers.interpolation import nearest_grid_point_interpolate as intpl
-from helpers.data_assimilation import (
-    load_and_interpolate_forecast,
-    add_observations
-)
+
+from helpers.data_assimilation import load_data
 from helpers import metrics
 
 THRESHOLD = 10
 
-
-def load_model_data(model_name, element_id, issue, forecast_hour=None):
-    data = load_and_interpolate_forecast(intpl, model_name, element_id, issue)
-
-    if forecast_hour is not None:
-        data = data[data.forecast_hour == forecast_hour]
-    return data
-
-
-def load_data(
-    element_id, issue, forecast_hour=None, models=["eps", "control", "fc"]
-):
-    # Load data from control and EPS
-    data = pd.DataFrame()
-    for model in models:
-        model_data = \
-            load_model_data(model, element_id, issue, forecast_hour)
-
-        if data.empty:
-            data = model_data
-        else:
-            data = pd.merge(data, model_data, copy=False, how='outer')
-    data = add_observations(data)
-    data.sort_values('valid_date', ascending=True, inplace=True)
-    return data
+# Configure cache
+CACHE_DIR = '.cache'
+cache = pyfscache.FSCache(CACHE_DIR)
 
 
 def clean_data(data):
     data.dropna(axis=0, how='any', inplace=True)
 
 
+# @cache
+def cached_load_data(**kwargs):
+    return load_data(**kwargs)
+
+
+# @cache
+def cached_load_forecast_hour_data(forecast_hour, **kwargs):
+    data = cached_load_data(**kwargs)
+    data = data[data.forecast_hour == forecast_hour]
+    clean_data(data)
+    return data
+
+
+@cache
 def pipeline(element_id, issue, forecast_hour):
 
     # ensemble definition
@@ -57,9 +47,12 @@ def pipeline(element_id, issue, forecast_hour):
     obs_col = '2T_OBS'
     model = GaussianMixtureModel(len(ens_cols))
 
-    # Load data
-    data = load_data(element_id, issue, forecast_hour, model_names)
-    clean_data(data)
+    data = cached_load_forecast_hour_data(
+        forecast_hour,
+        element_id=element_id,
+        issue=issue,
+        model_names=model_names
+    )
 
     # The dates to predict for
     train_days = 40
@@ -302,5 +295,5 @@ def do_verification(data):
 if __name__ == "__main__":
     # plot_ensemble_pdfs()
     data = pipeline("167", "0", 72)
-    a, b, c = calculate_threshold_hits(data)
-    plot_relialibilty_sharpness_diagram(a, b, c)
+    # a, b, c = calculate_threshold_hits(data)
+    # plot_relialibilty_sharpness_diagram(a, b, c)
