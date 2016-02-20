@@ -32,13 +32,11 @@ def regroup_dataframe(forecast_data, model_name):
     element_name = forecast_data.iloc[0]['element_name']
 
     # Define columns necessary for finding groups
-    group_cols = [
+    grouping = forecast_data.groupby([
         'ec_table_id', 'element_id', 'element_name',
         'issue_date', 'forecast_hour',
         'numberOfForecastsInEnsemble'
-    ]
-    grouping = forecast_data.groupby(group_cols)
-    nr_groups = len(grouping)
+    ])
 
     # List the perturbation identifiers
     perturbations = forecast_data['perturbationNumber'].unique()
@@ -51,15 +49,14 @@ def regroup_dataframe(forecast_data, model_name):
     data_dict = {name: [] for name in names}
 
     # Loop over groups to extract relevant columns
-    for label, group in grouping:
+    for _, group in grouping:
         member_ids = group['perturbationNumber'].values
         col_values = group['interpolated_forecast'].values
         for (member_id, interpolated_value) in zip(member_ids, col_values):
-            value = round(interpolated_value, 3)
             data_dict[
                 _get_element_key(model_name, member_id,
                                  nr_perturbations, element_name)
-            ].append(value)
+            ].append(round(interpolated_value, 3))
 
         # Add index of first row in group for later concatenation.
         index = group.iloc[[0]].index[0]
@@ -79,7 +76,7 @@ def regroup_dataframe(forecast_data, model_name):
         copy=False
     )
     # Verify that the number of expected rows is present in the join.
-    assert len(forecast_data) == nr_groups, \
+    assert len(forecast_data) == len(grouping), \
         "Something went wrong in reformatting the data"
     return forecast_data
 

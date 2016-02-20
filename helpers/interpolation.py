@@ -37,18 +37,18 @@ def distance(point1, point2):
     return int(round(d))
 
 
-def bilinear_interpolate(points, values, query_point):
-    assert len(points) == 4, "Bad number of points provided."
-    assert len(points) == len(values), "Unequal number of points and values."
-
-    # Sort points such that:
-    # 0 - bottom left
-    # 1 - bottom right
-    # 2 - top left
-    # 3 - top right
-
-    # Assert query point lies within square.
-    # TODO
+# def bilinear_interpolate(points, values, query_point):
+#     assert len(points) == 4, "Bad number of points provided."
+#     assert len(points) == len(values), "Unequal number of points and values."
+#
+#     # Sort points such that:
+#     # 0 - bottom left
+#     # 1 - bottom right
+#     # 2 - top left
+#     # 3 - top right
+#
+#     # Assert query point lies within square.
+#     # TODO
 
 
 def nearest_grid_point(distances):

@@ -133,6 +133,11 @@ def read_forecast_data(model, element_id, issue, file_path=None):
     return forecast_data
 
 
+def _extract_from_string(needle, haystack):
+    """Given an indicator string, extract the value that comes after it"""
+    return haystack.find(needle) + len(needle)
+
+
 def read_meta_data(model, element_id, issue, file_path=None):
     """Read a meta-data file and return the grid point latitudes, longitudes
     and distance to the query point."""
@@ -140,30 +145,26 @@ def read_meta_data(model, element_id, issue, file_path=None):
     if file_path is None:
         file_path = FILE_PATH + 'grib/'
 
-    file_name = \
-        file_path + \
+    file_path += \
         '_'.join(['meta', model, element_id, issue]) + \
         '.tmp'
-    with open(file_name, 'r') as f:
+    with open(file_path, 'r') as f:
         lines = f.readlines()
     assert len(lines) == 4, "Meta-files should always have 4 lines."
 
     # Extract distances towards queried point.
-    dist_str = "distance="
-    lat_str = "latitude="
-    lon_str = "longitude="
     distance = [-1.] * 4
     latitude = [-1.] * 4
     longitude = [-1.] * 4
 
     for (count, line) in enumerate(lines):
-        lat_index = line.find(lat_str) + len(lat_str)
+        lat_index = _extract_from_string("latitude=", line)
         latitude[count] = float(line[lat_index:(lat_index + 5)])
 
-        lon_index = line.find(lon_str) + len(lon_str)
+        lon_index = _extract_from_string("longitude=", line)
         longitude[count] = float(line[lon_index:(lon_index + 5)])
 
-        dist_index = line.find(dist_str) + len(dist_str)
+        dist_index = _extract_from_string("distance=", line)
         distance[count] = float(line[dist_index:(dist_index + 5)])
 
     return latitude, longitude, distance

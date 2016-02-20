@@ -24,7 +24,7 @@ def _maximum_likelihood_std(X, y):
     return errors.std(axis=0)
 
 
-class GaussianMixtureModel:
+class GaussianMixtureModel(object):
     """"""
 
     def __init__(self, member_count):
@@ -114,7 +114,7 @@ class GaussianMixtureModel:
         ])
 
 
-class MixtureMember:
+class MixtureMember(object):
     """"""
 
     def __init__(self, distribution):

@@ -123,7 +123,7 @@ def get_bins(nr_bins, left_lim=0, right_lim=1):
 
 
 def calculate_threshold_hits(data, nr_bins=11):
-    bin_centers, bin_edges, bin_width = get_bins(nr_bins, -0.05, 1.05)
+    bin_centers, bin_edges, _ = get_bins(nr_bins, -0.05, 1.05)
     # TODO Hard-coded single threshold
     threshold = (op.le, 273.15 + THRESHOLD)
     threshold_col = '2T_BELOW_DEGREE_PROB'
@@ -134,7 +134,7 @@ def calculate_threshold_hits(data, nr_bins=11):
     prob_hits = np.zeros(nr_bins)
     nr_rows = 0
     # For each record
-    for index, row in data.iterrows():
+    for _, row in data.iterrows():
         observation = row[obs_col]
         threshold_prob = row[threshold_col]
         # Check quality
@@ -154,7 +154,7 @@ def calculate_threshold_hits(data, nr_bins=11):
 
 def plot_relialibilty_sharpness_diagram(bin_centers, prob_hits, prob_count):
     # Figure plotting
-    f, (ax1, ax2) = plt.subplots(2, figsize=(8, 10))
+    _, (ax1, ax2) = plt.subplots(2, figsize=(8, 10))
     # Reliability diagram ploting
     ax1.plot(bin_centers, prob_hits, marker='o')
     ax1.legend(["Model"])
@@ -244,7 +244,7 @@ def plot_distribution(model, observation, forecast_date=None):
     forecast_pdf = model.pdf(thresholds)
     forecast_cdf = model.cdf(thresholds)
 
-    f, (ax1, ax2) = plt.subplots(2, sharex=True)
+    _, (ax1, ax2) = plt.subplots(2, sharex=True)
 
     # Plot model marginal pdf
     ax1.plot(thresholds, forecast_pdf, "blue", label="Model")
