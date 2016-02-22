@@ -275,12 +275,42 @@ def plot_distribution(model, observation, forecast_date=None):
     plt.show()
 
 
-def get_hourly_values(data, column, forecast_hours):
+def get_hourly_values(data, apply_fun, forecast_hours):
     values = [0] * len(forecast_hours)
     for count, forecast_hour in enumerate(forecast_hours):
         hourly_data = data[data.forecast_hour == forecast_hour]
-        values[count] = hourly_data[column].mean()
-    return values
+        fun_result = hourly_data.apply(apply_fun, axis=1)
+        values[count] = (fun_result.mean(), fun_result.std())
+    return np.array(values)
+
+
+def plot_hourly_values(data, forecast_hours,
+                       apply_fun, name, handle=None, color='b', spread=True):
+    """
+    forecast_hours should be numpy array
+    """
+    hourly_values = \
+        get_hourly_values(data, apply_fun, forecast_hours)
+    # Filter out NaN values
+    good_means = ~np.isnan(hourly_values[:, 0])
+    good_stds = ~np.isnan(hourly_values[:, 1])
+    assert all(good_means == good_stds)
+    # Do plotting
+    if handle is not None:
+        plt.figure(handle.number)
+    plt.plot(forecast_hours[good_means], hourly_values[good_means, 0], color)
+    if spread:
+        plt.fill_between(
+            forecast_hours[good_means],
+            hourly_values[good_means, 0] - 2 * hourly_values[good_means, 1],
+            hourly_values[good_means, 0] + 2 * hourly_values[good_means, 1],
+            color=color, alpha=0.2
+        )
+    plt.xlabel("Forecast hour")
+    plt.ylabel(name)
+    plt.grid(True)
+    if handle is None:
+        plt.show()
 
 
 def do_verification(data, forecast_hour):
@@ -299,6 +329,5 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = range(0, 12)
+    forecast_hours = np.arange(0, 72+1, 3)
     data = pipeline("167", "0", forecast_hours)
-    
