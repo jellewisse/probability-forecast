@@ -37,22 +37,6 @@ def distance(point1, point2):
     return int(round(d))
 
 
-def nearest_grid_point(distances):
-    """Returns the index of the nearest grid point."""
-    return distances.index(min(distances))
-
-
-def nearest_grid_point_interpolate(forecasts,
-                                   lats=None, lons=None, dists=None):
-    """Nearest grid point interpolation function.
-
-    forecasts should be a dataframe """
-    assert dists is not None, "Distances should be provided."
-    values = np.around(forecasts.ix[:, nearest_grid_point(dists)].values, 3)
-    values.astype(np.float32, copy=False)
-    return values
-
-
 def argsort(myList):
     return [i[0] for i in sorted(enumerate(myList), key=lambda x:x[1])]
 
@@ -78,6 +62,10 @@ def grid_point_order(lats, lons):
     top_points = lat_sort_index[-2:]
     bottom_points = lat_sort_index[:2]
 
+    # Top row and bottom row should be perpendicular.
+    assert lats[top_points[0]] == lats[top_points[1]] and \
+        lats[bottom_points[0]] == lats[bottom_points[0]]
+
     # Enable indexing with indices
     lons = np.array(lons)
     lats = np.array(lats)
@@ -87,25 +75,44 @@ def grid_point_order(lats, lons):
     return [top_left, top_right, bot_left, bot_right]
 
 
-# # TODO Test
-# def bilinear_interpolate(forecasts, lats=None, lons=None, dists=None):
-#     assert len(lats) == 4, "Bad number of points provided."
-#     assert len(lats) == len(lons), "Unequal number of points and values."
-#     assert len(lats) == len(forecasts)
-#
-#     # Sort points such that:
-#     # 1 - top left
-#     # 2 - top right
-#     # 3 - bottom left
-#     # 4 - bottom right
-#
-#     # 2. Assert queried rectangle has perpendicular longitudinal lines
-#
-#
-#     # 3. Do interpolation
+# TODO Test
+def bilinear_interpolate(lat, lon,
+                         forecasts, lats=None, lons=None, dists=None):
+    assert len(lats) == 4, "Bad number of points provided."
+    assert len(lats) == len(lons), "Unequal number of points and values."
+    assert len(lats) == len(forecasts)
+    # Does not account for overflow near borders
+
+    # Sort points such that:
+    # 1 - top left
+    # 2 - top right
+    # 3 - bottom left
+    # 4 - bottom right
+    nw, ne, sw, se = grid_point_order(lats, lons)
+    # delta_x = distance((lats[ne], lons[ne]), (lats[nw], lons[nw]))
+    # delta_y = distance((lats[ne], lons[ne]), (lats[nw], lons[nw]))
+
+    # Do interpolation
 
 
-def interpolate(forecasts, lats, lons, dists,
+def nearest_grid_point(distances):
+    """Returns the index of the nearest grid point."""
+    return distances.index(min(distances))
+
+
+def nearest_grid_point_interpolate(lat, lon, forecasts,
+                                   lats=None, lons=None, dists=None):
+    """Nearest grid point interpolation function.
+
+    forecasts should be a dataframe """
+    assert dists is not None, "Distances should be provided."
+    values = np.around(forecasts.ix[:, nearest_grid_point(dists)].values, 3)
+    values.astype(np.float32, copy=False)
+    return values
+
+
+def interpolate(lat, lon,
+                forecasts, lats, lons, dists,
                 forecast_fun=nearest_grid_point_interpolate):
     """General interpolation function."""
 
@@ -113,7 +120,9 @@ def interpolate(forecasts, lats, lons, dists,
     assert len(lats) == len(lons), "Latitudes and longitudes don't match."
     assert len(dists) == 4, "Bad number of distances provided."
 
-    interpolated_forecasts = \
-        forecast_fun(forecasts=forecasts, lats=lats, lons=lons, dists=dists)
+    interpolated_forecasts = forecast_fun(
+        lat, lon,
+        forecasts=forecasts, lats=lats, lons=lons, dists=dists
+    )
 
     return interpolated_forecasts

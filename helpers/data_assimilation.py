@@ -8,6 +8,10 @@ from helpers.interpolation import (
     nearest_grid_point_interpolate as intpl
 )
 
+# For now these are hard-coded since there only is one station
+STATION_LAT = 52.31555938720703
+STATION_LON = 4.790283679962158
+
 
 # TODO Test
 def _get_element_key(model_name, perturbation_id,
@@ -125,6 +129,7 @@ def load_and_interpolate_forecast(interpolation_func,
     forecast_data = data_readers.read_forecast_data(model, element_id, issue)
 
     interpolated_forecast = interpolate(
+        STATION_LAT, STATION_LON,
         forecast_data.ix[:, forecast_cols], lats, lons, dists,
         interpolation_func
     )
