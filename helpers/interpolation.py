@@ -37,20 +37,6 @@ def distance(point1, point2):
     return int(round(d))
 
 
-# def bilinear_interpolate(points, values, query_point):
-#     assert len(points) == 4, "Bad number of points provided."
-#     assert len(points) == len(values), "Unequal number of points and values."
-#
-#     # Sort points such that:
-#     # 0 - bottom left
-#     # 1 - bottom right
-#     # 2 - top left
-#     # 3 - top right
-#
-#     # Assert query point lies within square.
-#     # TODO
-
-
 def nearest_grid_point(distances):
     """Returns the index of the nearest grid point."""
     return distances.index(min(distances))
@@ -65,6 +51,58 @@ def nearest_grid_point_interpolate(forecasts,
     values = np.around(forecasts.ix[:, nearest_grid_point(dists)].values, 3)
     values.astype(np.float32, copy=False)
     return values
+
+
+def argsort(myList):
+    return [i[0] for i in sorted(enumerate(myList), key=lambda x:x[1])]
+
+
+def find_left_right(lons, index):
+    assert len(lons) == 2
+    assert len(index) == len(lons)
+
+    if lons[0] < lons[1]:
+        return (index[0], index[1])
+    else:
+        return (index[1], index[0])
+
+
+def grid_point_order(lats, lons):
+    """Given four lat-lon pairs, determine the coordinate values."""
+
+    # Sort points based on latitude
+    lat_sort_index = argsort(lats)
+    # lon_sort_index = argsort(lons)
+
+    # Find top row - two values with highest latitudes
+    top_points = lat_sort_index[-2:]
+    bottom_points = lat_sort_index[:2]
+
+    # Enable indexing with indices
+    lons = np.array(lons)
+    lats = np.array(lats)
+    # Find top left / North-West
+    top_left, top_right = find_left_right(lons[top_points], top_points)
+    bot_left, bot_right = find_left_right(lons[bottom_points], bottom_points)
+    return [top_left, top_right, bot_left, bot_right]
+
+
+# # TODO Test
+# def bilinear_interpolate(forecasts, lats=None, lons=None, dists=None):
+#     assert len(lats) == 4, "Bad number of points provided."
+#     assert len(lats) == len(lons), "Unequal number of points and values."
+#     assert len(lats) == len(forecasts)
+#
+#     # Sort points such that:
+#     # 1 - top left
+#     # 2 - top right
+#     # 3 - bottom left
+#     # 4 - bottom right
+#
+#     # 2. Assert queried rectangle has perpendicular longitudinal lines
+#
+#
+#     # 3. Do interpolation
 
 
 def interpolate(forecasts, lats, lons, dists,

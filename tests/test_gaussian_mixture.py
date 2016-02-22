@@ -1,7 +1,7 @@
 from numpy.testing import assert_almost_equal
 
 
-class TestCrps:
+class TestGaussianMixtureModel:
 
     @classmethod
     def setup_class(self):
