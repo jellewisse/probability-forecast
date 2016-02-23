@@ -75,24 +75,42 @@ def grid_point_order(lats, lons):
     return [top_left, top_right, bot_left, bot_right]
 
 
-# TODO Test
-def bilinear_interpolate(lat, lon,
-                         forecasts, lats=None, lons=None, dists=None):
+# @cache
+def get_bilinear_weights(req_lat, req_lon, lats, lons):
+    """"""
+    # Does not account for overflow near borders
+    NW, NE, SW, SE = grid_point_order(lats, lons)
+    # Horizontal distances
+    dxTop = lons[NE] - lons[NW]
+    dxReqToNW = (req_lon - lons[NW]) / dxTop
+    dxReqToNE = 1 - dxReqToNW
+    dxBottom = lons[SE] - lons[SW]
+    dxReqToSW = (req_lon - lons[SW]) / dxBottom
+    dxReqToSE = 1 - dxReqToSW
+    # Vertical distances
+    dy = lats[NW] - lats[SW]
+    dyReqToBottom = (req_lat - lats[SW]) / dy
+    dyReqToTop = 1 - dyReqToBottom
+    # Weights are returned in same order as points were originally indexed
+    weights = np.zeros(4)
+    weights[NW] = dxReqToNE * dyReqToBottom * dxBottom
+    weights[NE] = dxReqToNW * dyReqToBottom * dxBottom
+    weights[SW] = dxReqToSE * dyReqToTop * dxTop
+    weights[SE] = dxReqToSW * dyReqToTop * dxTop
+    Z = sum(weights)
+    return weights / Z
+
+
+# TÖDO Test
+def bilinear_interpolate(req_lat, req_lon,
+                         forecasts, lats, lons, dists=None):
     assert len(lats) == 4, "Bad number of points provided."
     assert len(lats) == len(lons), "Unequal number of points and values."
     assert len(lats) == len(forecasts)
-    # Does not account for overflow near borders
-
-    # Sort points such that:
-    # 1 - top left
-    # 2 - top right
-    # 3 - bottom left
-    # 4 - bottom right
-    nw, ne, sw, se = grid_point_order(lats, lons)
-    # delta_x = distance((lats[ne], lons[ne]), (lats[nw], lons[nw]))
-    # delta_y = distance((lats[ne], lons[ne]), (lats[nw], lons[nw]))
-
-    # Do interpolation
+    weights = get_bilinear_weights(req_lat, req_lon, lats, lons)
+    return sum([
+        weight * forecast for (weight, forecast) in zip(weights, forecasts)
+    ])
 
 
 def nearest_grid_point(distances):

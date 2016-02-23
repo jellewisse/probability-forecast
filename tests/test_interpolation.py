@@ -79,3 +79,32 @@ def test_grid_point_order(mock_rectangle):
 
     test_index = grid_point_order(lats, lons)
     assert index == list(test_index)
+
+
+@pytest.fixture(
+    params=[
+        {
+            'point': (0, 0),
+            'weights': [.25, .25, .25, .25]
+        }
+    ]
+)
+def mock_request(request):
+    """Mock requests for points on the grid specified in
+    test_bilinear_weights"""
+    return request.param
+
+
+def test_bilinear_weights(mock_request):
+    from helpers.interpolation import get_bilinear_weights
+    lats = [-1, 1, -1, 1]
+    lons = [-1, -1, 1, 1]
+    test_weights = get_bilinear_weights(
+        mock_request['point'][0],
+        mock_request['point'][1],
+        lats,
+        lons
+    )
+    print(type(test_weights))
+    print(type(mock_request['weights']))
+    assert all(mock_request['weights'] == test_weights)
