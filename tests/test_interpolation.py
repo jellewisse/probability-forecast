@@ -28,6 +28,13 @@ def test_distance(mock_distances):
     assert distance(*mock_distances['args']) == mock_distances['return']
 
 
+def test_commuted_distance(mock_distances):
+    """Test whether distance calculation is commutative."""
+    from helpers.interpolation import distance
+    assert distance(*list(reversed(mock_distances['args']))) == \
+        mock_distances['return']
+
+
 def test_argsort():
     from helpers.interpolation import argsort
     input_list = [1, 2, 3, 100, 5]
