@@ -105,16 +105,20 @@ def get_bilinear_weights(req_lat, req_lon, lats, lons):
     return weights / Z
 
 
-# TÖDO Test
 def bilinear_interpolate(req_lat, req_lon,
                          forecasts, lats, lons, dists=None):
     assert len(lats) == 4, "Bad number of points provided."
     assert len(lats) == len(lons), "Unequal number of points and values."
-    assert len(lats) == len(forecasts)
+    assert forecasts.shape[1] == 4
+    # TODO Do grouping by station id, find weights per station and apply
+    # weights on each group
     weights = get_bilinear_weights(req_lat, req_lon, lats, lons)
-    return sum([
-        weight * forecast for (weight, forecast) in zip(weights, forecasts)
-    ])
+    return forecasts.apply(
+        lambda row: sum([
+            weight * forecast for (weight, forecast) in zip(weights, row)
+        ]),
+        axis=1
+    )
 
 
 def nearest_grid_point(distances):
