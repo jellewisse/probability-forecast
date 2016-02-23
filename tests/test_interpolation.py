@@ -90,9 +90,19 @@ def test_grid_point_order(mock_rectangle):
 
 @pytest.fixture(
     params=[
+        # The middle of the points
         {
-            'point': (0, 0),
+            'point': (0, 0),  # Specified as (lat,lon)
             'weights': [.25, .25, .25, .25]
+        },
+        # Exactly on top of one of the points
+        {
+            'point': (-1, 1),
+            'weights': [0, 0, 1, 0]
+        },
+        {
+            'point': (0, -0.5),
+            'weights': [0.375, 0.375, 0.125, 0.125]
         }
     ]
 )
@@ -106,6 +116,7 @@ def test_bilinear_weights(mock_request):
     from helpers.interpolation import get_bilinear_weights
     lats = [-1, 1, -1, 1]
     lons = [-1, -1, 1, 1]
+    # nw, ne, sw, se = (1, 3, 0, 2)
     test_weights = get_bilinear_weights(
         mock_request['point'][0],
         mock_request['point'][1],

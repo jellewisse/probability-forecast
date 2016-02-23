@@ -78,6 +78,10 @@ def grid_point_order(lats, lons):
 # @cache
 def get_bilinear_weights(req_lat, req_lon, lats, lons):
     """"""
+    # Request point should be within square
+    assert any(req_lat <= np.array(lats)) and any(req_lat >= np.array(lats))
+    assert any(req_lon <= np.array(lons)) and any(req_lon >= np.array(lons))
+
     # Does not account for overflow near borders
     NW, NE, SW, SE = grid_point_order(lats, lons)
     # Horizontal distances
