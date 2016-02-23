@@ -285,7 +285,7 @@ def get_hourly_values(data, apply_fun, forecast_hours):
 
 
 def plot_hourly_values(data, forecast_hours,
-                       apply_fun, name, handle=None, color='b', spread=True):
+                       apply_fun, handle=None, color='b', spread=True):
     """
     forecast_hours should be numpy array
     """
@@ -307,10 +307,41 @@ def plot_hourly_values(data, forecast_hours,
             color=color, alpha=0.2
         )
     plt.xlabel("Forecast hour")
-    plt.ylabel(name)
     plt.grid(True)
     if handle is None:
         plt.show()
+
+
+def plot_hourly_mae(data, forecast_hours):
+    f = plt.figure()
+    plot_hourly_values(
+        data, forecast_hours,
+        lambda row: np.abs(row['2T_FC'] - row['2T_OBS']),
+        f, 'r', spread=True)
+    plot_hourly_values(
+        data, forecast_hours,
+        lambda row: np.abs(row['2T_CONTROL'] - row['2T_OBS']),
+        f, 'g', spread=True)
+    plot_hourly_values(
+        data, forecast_hours,
+        lambda row: np.abs(row['2T_ENSEMBLE_MEAN'] - row['2T_OBS']),
+        f, 'b', spread=True)
+    plt.legend(["Oper", "Control", "Ensemble+"])
+    plt.title("MAE for different models")
+    plt.ylabel("Temperature MAE (K)")
+    plt.show()
+
+
+def plot_hourly_crps(data, forecast_hours):
+    f = plt.figure()
+    plot_hourly_values(
+        data, forecast_hours,
+        lambda row: row['2T_CRPS'],
+        f, 'b', spread=True)
+    plt.legend(["Ensemble+"])
+    plt.title("CRPS")
+    plt.ylabel("Temperature CRPS (K)")
+    plt.show()
 
 
 def do_verification(data, forecast_hour):
