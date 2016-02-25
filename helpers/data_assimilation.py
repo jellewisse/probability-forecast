@@ -5,7 +5,7 @@ import pandas as pd
 from helpers import data_readers
 from helpers.interpolation import (
     interpolate,
-    bilinear_interpolate as intpl
+    nearest_grid_point_interpolate as intpl
 )
 
 # For now these are hard-coded since there only is one station
