@@ -37,7 +37,6 @@ def pipeline(element_id, issue, forecast_hours):
     ens_cols.append('2T_FC')
     obs_col = '2T_OBS'
     model = GaussianMixtureModel(len(ens_cols))
-
     # Load data
     full_data = cached_load_data(
         element_id,
@@ -100,7 +99,9 @@ def pipeline(element_id, issue, forecast_hours):
             obs_in_forecasts.sort()
             full_data.loc[index, '2T_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
-            # plot_distribution(model, observation, valid_date)
+            # plot_distribution(model, row[obs_col], valid_date)
+            # import pdb
+            # pdb.set_trace()
 
     # 6. Use verify callback to call verification methods
     # do_verification(data)
@@ -360,5 +361,5 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 72+1, 3)
+    forecast_hours = np.arange(0, 12+1, 3)
     data = pipeline("167", "0", forecast_hours)

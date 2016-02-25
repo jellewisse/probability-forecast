@@ -5,8 +5,8 @@ from scipy.stats import norm
 # User modules
 from .base import (
     MixtureModel,
-    _squared_error_calculation
-    # _maximum_likelihood_bias,
+    _squared_error_calculation,
+    _maximum_likelihood_bias,
     # _maximum_likelihood_std
 )
 
@@ -40,6 +40,7 @@ class GaussianMixtureModel(MixtureModel):
         """
         super().__init__(member_count, norm)
         self._forecast_prepared = False
+        self._optimizer = GaussianEM(member_count)
 
     def fit(self, X, y):
         """
@@ -54,13 +55,21 @@ class GaussianMixtureModel(MixtureModel):
         assert X.shape[0] == y.shape[0], "Input and tragets do not match."
         assert len(y.shape) == 1, "Provided y is not a vector."
         self._forecast_prepared = False
-        # # Mean bias correction
-        # model_bias = _maximum_likelihood_bias(X[:, 0], y)
-        # # Training strategy: train on first member.
-        # model_std = _maximum_likelihood_std(X[:, 0] - model_bias, y)
-        # for member in self._members:
-        #     member.parameters['scale'] = model_std
-        #     member.bias = model_bias
+        # Mean bias correction on first member
+        model_bias = _maximum_likelihood_bias(X[:, 0], y)
+        self._optimizer.fit(X - model_bias, y)
+
+        # TODO Check for singularities
+
+        # Update variances and bias
+        for (member, model_std) in \
+            zip(self._members,
+                self._optimizer.variances):
+            member.parameters['scale'] = model_std
+            member.bias = model_bias
+
+        # Update weights
+        self.weigths = self._optimizer.weights
 
     def _check_member_means(self):
         if not self._forecast_prepared:
