@@ -1,5 +1,6 @@
 # gaussian_mixture.py
 import numpy as np
+from numpy.testing import assert_almost_equal
 from scipy.stats import norm
 
 # User modules
@@ -56,20 +57,22 @@ class GaussianMixtureModel(MixtureModel):
         assert len(y.shape) == 1, "Provided y is not a vector."
         self._forecast_prepared = False
         # Mean bias correction on first member
-        model_bias = _maximum_likelihood_bias(X[:, 0], y)
-        self._optimizer.fit(X - model_bias, y)
+        bias_per_model = _maximum_likelihood_bias(X, y)
+        self._optimizer.fit(X - bias_per_model, y)
 
         # TODO Check for singularities
 
         # Update variances and bias
-        for (member, model_std) in \
+        for (member, model_std, model_bias) in \
             zip(self._members,
-                self._optimizer.variances):
+                self._optimizer.variances,
+                bias_per_model):
             member.parameters['scale'] = model_std
             member.bias = model_bias
 
         # Update weights
-        self.weigths = self._optimizer.weights
+        self.weights = self._optimizer.weights
+
 
     def _check_member_means(self):
         if not self._forecast_prepared:
@@ -113,15 +116,18 @@ class GaussianEM(object):
         # General attributes
         self._member_count = member_count
         # Model parameters
-        self.variances = np.ones((1, self._member_count))
+        self.variances = np.ones((1, self._member_count)) * 1e-10
         # Uniform prior on weights
         self.weights = np.ones((1, self._member_count)) / self._member_count
 
     def fit(self, X, y):
+        """Run the EM algorithm with the last solution as prior.
+        If there is no last solution a uniform prior is used."""
         assert self._member_count == X.shape[1], \
             "Data does not fit the model."
         assert X.shape[0] == y.shape[0], \
             "Mismatch between data and observations."
+
         iter_count = 0
         self.log_liks = []
         self.log_likelihood = np.nan
@@ -139,14 +145,15 @@ class GaussianEM(object):
                 # print("Singularity detected - perturbing")
                 self.perturb_singularities()
             iter_count += 1
+        # Algorithm tests
+        assert_almost_equal(self.weights.sum(), 1.0, 6)
         # Cleanup
-        if iter_count < self.N_ITER:
-            print("Log: BMA converged in %d iterations." % iter_count)
-        else:
-            print("Log: BMA did not converge within %d iterations." %
-                  self.N_ITER)
-            import pdb
-            pdb.set_trace()
+        # if iter_count < self.N_ITER:
+        #     print("Log: BMA converged in %d iterations." % iter_count)
+        # else:
+        #     # No convergence - reuse parameters from previous iteration.
+        #     print("Log: BMA did not converge within %d iterations." %
+        #           self.N_ITER)
         # print("Log likelihood: %f" % self.log_likelihood)
         # print("Member weights: ", self.weights)
         # print("Member variances: ", self.variances)

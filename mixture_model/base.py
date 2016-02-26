@@ -57,7 +57,6 @@ class MixtureModel(metaclass=abc.ABCMeta):
         -----------
         x : list
         """
-
         return sum([
             member.pdf(x) * weight
             for (member, weight)

@@ -32,7 +32,9 @@ def pipeline(element_id, issue, forecast_hours):
 
     # Ensemble definition
     model_names = ["eps", "control", "fc"]
-    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    # ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    ens_cols = ['2T_EPS01']
+    # ens_cols = []
     ens_cols.append('2T_CONTROL')
     ens_cols.append('2T_FC')
     obs_col = '2T_OBS'
@@ -43,21 +45,28 @@ def pipeline(element_id, issue, forecast_hours):
         issue,
         model_names
     )
-    for count, forecast_hour in enumerate(forecast_hours):
+    train_days = 40
+    all_model_weights = np.ones((
+        len(forecast_hours),
+        85,
+        len(ens_cols),
+    )) * np.nan
+    for fh_count, forecast_hour in enumerate(forecast_hours):
         print("Processing %d / %d forecast hours." %
-              (count+1, len(forecast_hours)))
+              (fh_count+1, len(forecast_hours)))
         data = full_data[full_data.forecast_hour == forecast_hour]
         # TODO Write results to other dataframe than original data
         # The dates to predict for
-        train_days = 40
         lag = _calculate_lag(forecast_hour)
         valid_dates = data['valid_date'].unique()
         assert len(valid_dates) == len(data), \
             "Each valid date should only have a single prediction"
         # Prediction intervals
         thresholds = np.arange(-30, 30, 1) + 273.15
-
+        model_weights = []
+        plot_valid_dates = []
         # Moving window prediction
+        row_count = 0
         for index, row in data.iterrows():
             # Select data
             valid_date = row['valid_date']
@@ -79,7 +88,9 @@ def pipeline(element_id, issue, forecast_hours):
 
             # Train
             model.fit(X_train, y_train)
-
+            model_weights.append(model.weights)
+            all_model_weights[fh_count, row_count, :] = model.weights
+            plot_valid_dates.append(valid_date)
             # Predict
             model.set_member_means(X_test)
 
@@ -99,14 +110,22 @@ def pipeline(element_id, issue, forecast_hours):
             obs_in_forecasts.sort()
             full_data.loc[index, '2T_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
+            row_count += 1
             # plot_distribution(model, row[obs_col], valid_date)
-            # import pdb
-            # pdb.set_trace()
+        # plot_model_weights(plot_valid_dates, model_weights,
+        #                    forecast_hour, ens_cols)
+    return full_data, all_model_weights
 
-    # 6. Use verify callback to call verification methods
-    # do_verification(data)
-    # plot_reliability_diagram(data)
-    return full_data
+
+def plot_model_weights(valid_dates, model_weights, forecast_hour, names):
+    plt.plot(valid_dates, model_weights)
+    plt.grid(True)
+    plt.xlabel("Valid date")
+    plt.ylabel("Model contribution")
+    plt.title("Model weights for valid dates on forecast hour %d" %
+              forecast_hour)
+    plt.legend(names)
+    plt.show()
 
 
 def get_bins(nr_bins, left_lim=0, right_lim=1):
@@ -311,23 +330,28 @@ def plot_hourly_values(data, forecast_hours,
     plt.grid(True)
     if handle is None:
         plt.show()
+    return hourly_values
 
 
 def plot_hourly_mae(data, forecast_hours):
     f = plt.figure()
-    plot_hourly_values(
+    fc_mae = plot_hourly_values(
         data, forecast_hours,
         lambda row: np.abs(row['2T_FC'] - row['2T_OBS']),
         f, 'r', spread=True)
-    plot_hourly_values(
+    control_mae = plot_hourly_values(
         data, forecast_hours,
         lambda row: np.abs(row['2T_CONTROL'] - row['2T_OBS']),
         f, 'g', spread=True)
-    plot_hourly_values(
+    ensemble_mae = plot_hourly_values(
         data, forecast_hours,
         lambda row: np.abs(row['2T_ENSEMBLE_MEAN'] - row['2T_OBS']),
         f, 'b', spread=True)
-    plt.legend(["Oper", "Control", "Ensemble+"])
+    plt.legend([
+        "Oper:      %f" % fc_mae[:, 0].mean(),
+        "Control:   %f" % control_mae[:, 0].mean(),
+        "Ensemble+: %f" % ensemble_mae[:, 0].mean()
+    ])
     plt.title("MAE for different models")
     plt.ylabel("Temperature MAE (K)")
     plt.show()
@@ -335,11 +359,11 @@ def plot_hourly_mae(data, forecast_hours):
 
 def plot_hourly_crps(data, forecast_hours):
     f = plt.figure()
-    plot_hourly_values(
+    ensemble_crps = plot_hourly_values(
         data, forecast_hours,
         lambda row: row['2T_CRPS'],
         f, 'b', spread=True)
-    plt.legend(["Ensemble+"])
+    plt.legend(["Ensemble+: %f" % ensemble_crps[:, 0].mean()])
     plt.title("CRPS")
     plt.ylabel("Temperature CRPS (K)")
     plt.show()
@@ -361,5 +385,5 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 12+1, 3)
-    data = pipeline("167", "0", forecast_hours)
+    forecast_hours = np.arange(0, 72+1, 3)
+    data, all_model_weights = pipeline("167", "0", forecast_hours)
