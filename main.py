@@ -391,5 +391,22 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
+    class MyStderr(object):
+        def __init__(self, original_stderr):
+            self.original_stderr = original_stderr
+
+        def my_break(self):
+            import pdb
+            pdb.set_trace()
+
+        def write(self, *args, **kwargs):
+            self.my_break()
+
+        def writelines(self, *args, **kwargs):
+            self.my_break()
+
+    # import sys
+    # sys.stderr = MyStderr(sys.stderr)
+
     forecast_hours = np.arange(0, 72+1, 3)
     data, all_model_weights = pipeline("167", "0", forecast_hours)
