@@ -81,6 +81,11 @@ def pipeline(element_id, issue, forecast_hours):
                 # Not enough training days
                 # print("Skipping valid date ", str(row['valid_date']))
                 continue
+
+            # TODO Change algorithm to deal with missing data
+            # Filter out rows that have missing data
+            train_data = train_data.dropna(axis=0, subset=ens_cols)
+
             X_train = train_data[ens_cols].as_matrix()
             y_train = train_data[obs_col].as_matrix()
             X_test = row[ens_cols].as_matrix()
@@ -91,6 +96,7 @@ def pipeline(element_id, issue, forecast_hours):
             model_weights.append(model.weights)
             all_model_weights[fh_count, row_count, :] = model.weights
             plot_valid_dates.append(valid_date)
+
             # Predict
             model.set_member_means(X_test)
 
@@ -112,8 +118,8 @@ def pipeline(element_id, issue, forecast_hours):
                 obs_in_forecasts.index(y_test)
             row_count += 1
             # plot_distribution(model, row[obs_col], valid_date)
-        # plot_model_weights(plot_valid_dates, model_weights,
-        #                    forecast_hour, ens_cols)
+        plot_model_weights(plot_valid_dates, model_weights,
+                           forecast_hour, ens_cols)
     return full_data, all_model_weights
 
 

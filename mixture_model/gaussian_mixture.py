@@ -24,7 +24,9 @@ def _log_normal_pdf(squared_errors, variances):
     P += (-1.0 / 2) * np.log(variances)
     P += NORM_CONSTANT
     if np.any(np.isnan(P)):
-        raise ZeroDivisionError()
+        import pdb
+        pdb.set_trace()
+        raise ZeroDivisionError("Singularity in log normal pdfs.")
     return P
 
 
@@ -71,8 +73,7 @@ class GaussianMixtureModel(MixtureModel):
             member.bias = model_bias
 
         # Update weights
-        self.weights = self._optimizer.weights
-
+        self.weights = self._optimizer.weights.squeeze()
 
     def _check_member_means(self):
         if not self._forecast_prepared:
@@ -118,6 +119,8 @@ class GaussianEM(object):
         # Model parameters
         self.variances = np.ones((1, self._member_count)) * 1e-10
         # Uniform prior on weights
+        self.weight_prior = \
+            np.ones((1, self._member_count)) * 5.0  # / self._member_count
         self.weights = np.ones((1, self._member_count)) / self._member_count
 
     def fit(self, X, y):
@@ -135,18 +138,28 @@ class GaussianEM(object):
         self.squared_errors = _squared_error_calculation(X, y)
         self.responsibility = np.zeros(X.shape)
         while iter_count < self.N_ITER and not self._converged:
+            # print(iter_count)
+            # Algorithm tests
+            try:
+                assert_almost_equal(self.weights.sum(), 1.0, 6)
+            except AssertionError:
+                import pdb
+                pdb.set_trace()
+            if np.any(self.weights < 0) or np.any(self.weights > 1):
+                print("error in weights!")
+                import pdb
+                pdb.set_trace()
             try:
                 self.e_step()
                 self.m_step()
                 self.log_liks.append(self.log_likelihood)
-            except ZeroDivisionError:
+            except ZeroDivisionError as e:
                 # Singularity detected.
                 # Perturb parameters with random noise and restart fit.
                 # print("Singularity detected - perturbing")
                 self.perturb_singularities()
             iter_count += 1
-        # Algorithm tests
-        assert_almost_equal(self.weights.sum(), 1.0, 6)
+
         # Cleanup
         # if iter_count < self.N_ITER:
         #     print("Log: BMA converged in %d iterations." % iter_count)
@@ -161,6 +174,8 @@ class GaussianEM(object):
         self.squared_errors = None
 
     def perturb_singularities(self):
+        import pdb
+        pdb.set_trace()
         singularity_index = np.logical_or(np.logical_or(
             self.variances <= 1e-30,
             np.isinf(self.variances)),
@@ -211,6 +226,14 @@ class GaussianEM(object):
         error_sum_per_col = \
             (self.responsibility * self.squared_errors).sum(axis=0)
         new_variances = error_sum_per_col / norm_per_col
-        new_weights = norm_per_col / self.squared_errors.shape[0]
+
+        # Mixing coefficient update
+        N = self.squared_errors.shape[0]
+        # K = self.squared_errors.shape[1]
+        # new_weights = norm_per_col / N
+        new_weights = \
+            (norm_per_col + self.weight_prior - 1) / \
+            (N + (self.weight_prior - 1).sum())
+        # Do assignment
         self.variances = new_variances
         self.weights = new_weights
