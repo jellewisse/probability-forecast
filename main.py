@@ -64,6 +64,7 @@ def pipeline(element_id, issue, forecast_hours):
         # Prediction intervals
         thresholds = np.arange(-30, 30, 1) + 273.15
         model_weights = []
+        model_variances = []
         plot_valid_dates = []
         # Moving window prediction
         row_count = 0
@@ -76,16 +77,11 @@ def pipeline(element_id, issue, forecast_hours):
             # Alternative is to indexing first
             train_data = data[
                 (data.valid_date <= last_date) & (data.valid_date > first_date)
-            ]
+            ].dropna(axis=0, subset=ens_cols)
             if len(train_data) < train_days:
                 # Not enough training days
                 # print("Skipping valid date ", str(row['valid_date']))
                 continue
-
-            # TODO Change algorithm to deal with missing data
-            # Filter out rows that have missing data
-            train_data = train_data.dropna(axis=0, subset=ens_cols)
-
             X_train = train_data[ens_cols].as_matrix()
             y_train = train_data[obs_col].as_matrix()
             X_test = row[ens_cols].as_matrix()
@@ -94,9 +90,9 @@ def pipeline(element_id, issue, forecast_hours):
             # Train
             model.fit(X_train, y_train)
             model_weights.append(model.weights)
+            model_variances.append(model.get_member_variances())
             all_model_weights[fh_count, row_count, :] = model.weights
             plot_valid_dates.append(valid_date)
-
             # Predict
             model.set_member_means(X_test)
 
@@ -118,9 +114,22 @@ def pipeline(element_id, issue, forecast_hours):
                 obs_in_forecasts.index(y_test)
             row_count += 1
             # plot_distribution(model, row[obs_col], valid_date)
-        plot_model_weights(plot_valid_dates, model_weights,
-                           forecast_hour, ens_cols)
+        # plot_model_weights(plot_valid_dates, model_weights,
+        #                    forecast_hour, ens_cols)
+        # plot_model_variances(plot_valid_dates, model_variances,
+        #                      forecast_hour, ens_cols)
     return full_data, all_model_weights
+
+
+def plot_model_variances(valid_dates, model_variances, forecast_hour, names):
+    plt.plot(valid_dates, model_variances)
+    plt.grid(True)
+    plt.xlabel("Valid date")
+    plt.ylabel("Model variance")
+    plt.title("Model variances for valid dates on forecast hour %d" %
+              forecast_hour)
+    plt.legend(names)
+    plt.show()
 
 
 def plot_model_weights(valid_dates, model_weights, forecast_hour, names):
@@ -391,22 +400,5 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    class MyStderr(object):
-        def __init__(self, original_stderr):
-            self.original_stderr = original_stderr
-
-        def my_break(self):
-            import pdb
-            pdb.set_trace()
-
-        def write(self, *args, **kwargs):
-            self.my_break()
-
-        def writelines(self, *args, **kwargs):
-            self.my_break()
-
-    # import sys
-    # sys.stderr = MyStderr(sys.stderr)
-
     forecast_hours = np.arange(0, 72+1, 3)
     data, all_model_weights = pipeline("167", "0", forecast_hours)

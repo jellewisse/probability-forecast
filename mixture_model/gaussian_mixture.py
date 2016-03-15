@@ -91,6 +91,12 @@ class GaussianMixtureModel(MixtureModel):
             for member in self._members
         ]
 
+    def get_member_variances(self):
+        return [
+            member.parameters['scale']
+            for member in self._members
+        ]
+
     def mean(self):
         self._check_member_means()
         return sum([
@@ -116,11 +122,14 @@ class GaussianEM(object):
     def __init__(self, member_count):
         # General attributes
         self._member_count = member_count
+        self._dim = 1  # Dimensionality of output
         # Model parameters
-        self.variances = np.ones((1, self._member_count)) * 1e-10
+        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
+        self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
+        self.variances = np.ones((1, self._member_count))
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones((1, self._member_count)) * 5.0  # / self._member_count
+            np.ones((1, self._member_count))  # All ones means no prior
         self.weights = np.ones((1, self._member_count)) / self._member_count
 
     def fit(self, X, y):
@@ -143,20 +152,26 @@ class GaussianEM(object):
             try:
                 assert_almost_equal(self.weights.sum(), 1.0, 6)
             except AssertionError:
+                print("Weights don't sum to 1!")
                 import pdb
                 pdb.set_trace()
             if np.any(self.weights < 0) or np.any(self.weights > 1):
                 print("error in weights!")
                 import pdb
                 pdb.set_trace()
+            if np.any(np.isnan(self.variances)) or np.any(self.variances < 0):
+                print("error in variances!")
+                import pdb
+                pdb.set_trace()
             try:
                 self.e_step()
                 self.m_step()
                 self.log_liks.append(self.log_likelihood)
-            except ZeroDivisionError as e:
+            except ZeroDivisionError:
                 # Singularity detected.
                 # Perturb parameters with random noise and restart fit.
                 # print("Singularity detected - perturbing")
+                print("Perturbing!")
                 self.perturb_singularities()
             iter_count += 1
 
@@ -196,24 +211,31 @@ class GaussianEM(object):
         https://hips.seas.harvard.edu/blog/2013/01/09/computing-log-sum-exp/
         """
         # Calculate proportional responsibility
-        self.responsibility = \
+        new_responsibility = \
             _log_normal_pdf(self.squared_errors, self.variances)
-        self.responsibility += np.log(self.weights)
+        # TODO Weights can go to 0. Taking logarithm will give singularities.
+        new_responsibility += np.log(self.weights)
         new_loglik = 0
         # Update log-likelihood and normalize responsibilitøy
         # Use log-sum-exp trick.
         # Find maximum value per row
-        max_per_row = self.responsibility.max(axis=1)
+        max_per_row = new_responsibility.max(axis=1)
         # Normalization constant for each row
         norm_per_row = np.exp(
-            self.responsibility.transpose() - max_per_row
+            new_responsibility.transpose() - max_per_row
         ).transpose().sum(axis=1)
         # Normalize each row
         loglik_per_row = max_per_row + np.log(norm_per_row)
-        self.responsibility = np.exp(
-            self.responsibility.transpose() - loglik_per_row
+        new_responsibility2 = np.exp(
+            new_responsibility.transpose() - loglik_per_row
         ).transpose()
+        if (new_responsibility2 == 0).all(axis=0).any():
+            print("Singularity column in responsibility matrix")
+            import pdb
+            pdb.set_trace()
+        new_responsibility = new_responsibility2
         new_loglik = loglik_per_row.sum()
+        self.responsibility = new_responsibility
         self._converged = \
             np.diff([self.log_likelihood, new_loglik])[0] < self.E_TOL
         self.log_likelihood = new_loglik
@@ -221,19 +243,28 @@ class GaussianEM(object):
     # TODO Test
     def m_step(self):
         """"""
+        # TODO Adding prior information leads to singularities. Figure out why.
         # Normalization constant per column
         norm_per_col = self.responsibility.sum(axis=0)
         error_sum_per_col = \
             (self.responsibility * self.squared_errors).sum(axis=0)
+        # new_variances = \
+        #     (error_sum_per_col + self.variance_prior_W) / \
+        #     (norm_per_col + (self.variance_prior_nu - self._dim - 1))
         new_variances = error_sum_per_col / norm_per_col
+
+        if np.any(np.isnan(new_variances)) or np.any(new_variances < 0) \
+           or np.any(np.isinf(new_variances)):
+            print("error in variance computation!")
+            import pdb
+            pdb.set_trace()
 
         # Mixing coefficient update
         N = self.squared_errors.shape[0]
-        # K = self.squared_errors.shape[1]
-        # new_weights = norm_per_col / N
-        new_weights = \
-            (norm_per_col + self.weight_prior - 1) / \
-            (N + (self.weight_prior - 1).sum())
+        new_weights = norm_per_col / N
+        # new_weights = \
+        #     (norm_per_col + self.weight_prior - 1) / \
+        #     (N + (self.weight_prior - 1).sum())
         # Do assignment
         self.variances = new_variances
         self.weights = new_weights
