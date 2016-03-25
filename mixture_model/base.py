@@ -28,9 +28,8 @@ def _maximum_likelihood_std(X, y):
     return errors.std(axis=0)
 
 
-class MixtureModel(metaclass=abc.ABCMeta):
+class MixtureModel(object, metaclass=abc.ABCMeta):
     """"""
-    # __metaclass__ = abc.ABCMeta
 
     def __init__(self, member_count, distribution):
         """Initialize a mixture model with a specific distribution

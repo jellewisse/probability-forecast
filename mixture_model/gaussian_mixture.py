@@ -216,7 +216,7 @@ class GaussianEM(object):
         # TODO Weights can go to 0. Taking logarithm will give singularities.
         new_responsibility += np.log(self.weights)
         new_loglik = 0
-        # Update log-likelihood and normalize responsibilitøy
+        # Update log-likelihood and normalize responsibility
         # Use log-sum-exp trick.
         # Find maximum value per row
         max_per_row = new_responsibility.max(axis=1)
