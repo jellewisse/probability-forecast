@@ -124,13 +124,13 @@ class GaussianEM(object):
         self._member_count = member_count
         self._dim = 1  # Dimensionality of output
         # Model parameters
-        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
+        self.variance_prior_W = 1  # Matrix of dim x dim, 0 means no prior.
         self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
-        self.variances = np.ones((1, self._member_count))
+        self.variances = np.ones(self._member_count)
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones((1, self._member_count))  # All ones means no prior
-        self.weights = np.ones((1, self._member_count)) / self._member_count
+            np.ones(self._member_count) * 1.5  # All ones means no prior
+        self.weights = np.ones(self._member_count) / self._member_count
 
     def fit(self, X, y):
         """Run the EM algorithm with the last solution as prior.
@@ -248,10 +248,13 @@ class GaussianEM(object):
         norm_per_col = self.responsibility.sum(axis=0)
         error_sum_per_col = \
             (self.responsibility * self.squared_errors).sum(axis=0)
-        # new_variances = \
-        #     (error_sum_per_col + self.variance_prior_W) / \
-        #     (norm_per_col + (self.variance_prior_nu - self._dim - 1))
-        new_variances = error_sum_per_col / norm_per_col
+        # new_variances_no_prior = error_sum_per_col / norm_per_col
+        # Variance update formula
+        # The extra parentheses are necessary to force simplification of
+        # computation
+        new_variances = \
+            (error_sum_per_col + self.variance_prior_W) / \
+            (norm_per_col + (self.variance_prior_nu - self._dim - 1))
 
         if np.any(np.isnan(new_variances)) or np.any(new_variances < 0) \
            or np.any(np.isinf(new_variances)):
@@ -261,10 +264,14 @@ class GaussianEM(object):
 
         # Mixing coefficient update
         N = self.squared_errors.shape[0]
-        new_weights = norm_per_col / N
-        # new_weights = \
-        #     (norm_per_col + self.weight_prior - 1) / \
-        #     (N + (self.weight_prior - 1).sum())
+        # new_weights_no_prior = norm_per_col / N
+        # Weight update formula
+        # The extra parentheses are necessary to force simplification of
+        # computation
+        new_weights = \
+            (norm_per_col + (self.weight_prior - 1)) / \
+            (N + (self.weight_prior - 1).sum())
+
         # Do assignment
         self.variances = new_variances
         self.weights = new_weights
