@@ -18,6 +18,8 @@ def _log_normal_pdf(squared_errors, variances):
     """
     parameters:
     -----------
+    squared_errors: matrix (n x m)
+    variances: vector (m)
     """
 
     P = squared_errors * (-1.0 / (2.0 * variances))
@@ -30,20 +32,37 @@ def _log_normal_pdf(squared_errors, variances):
     return P
 
 
+def find(needle, haystack):
+    """Returns the indices in haystack equivalent to needle"""
+    return [x for (x, val) in enumerate(haystack) if needle == val]
+
+
+def group_column_vec(X, grouping):
+    """Averages elements in X based on the provided grouping index"""
+    assert len(X.shape) == 1, "no vector provided"
+    return np.dstack([X[g].mean() for g in grouping]).squeeze()
+
+
 class GaussianMixtureModel(MixtureModel):
     """"""
 
-    def __init__(self, member_count):
+    def __init__(self, member_count, grouping=None):
         """Initialize a univariate normal Gaussian Mixture Model
 
         Parameters
         ----------
         member_count : integer
             Number of members to initialize the mixture with
+        grouping : list of integers specifying to which group a model belongs
         """
         super().__init__(member_count, norm)
         self._forecast_prepared = False
-        self._optimizer = GaussianEM(member_count)
+        self.member_count = member_count
+        # Arguments for grouping
+        if grouping is None:
+            grouping = list(range(0, member_count))
+        self.grouping = grouping
+        self._optimizer = GaussianEM(grouping)
 
     def fit(self, X, y):
         """
@@ -55,25 +74,25 @@ class GaussianMixtureModel(MixtureModel):
             Targets for input data
             """
         assert X.shape[1] == self.member_count, "Bad number of member inputs"
-        assert X.shape[0] == y.shape[0], "Input and tragets do not match."
+        assert X.shape[0] == y.shape[0], "Input and targets do not match."
         assert len(y.shape) == 1, "Provided y is not a vector."
         self._forecast_prepared = False
+
+        # TODO Fix bias correction to support groups
         # Mean bias correction on first member
         bias_per_model = _maximum_likelihood_bias(X, y)
         self._optimizer.fit(X - bias_per_model, y)
 
-        # TODO Check for singularities
-
         # Update variances and bias
         for (member, model_std, model_bias) in \
             zip(self._members,
-                self._optimizer.variances,
+                self._optimizer.get_member_variances(),
                 bias_per_model):
             member.parameters['scale'] = model_std
             member.bias = model_bias
 
         # Update weights
-        self.weights = self._optimizer.weights.squeeze()
+        self.weights = self._optimizer.get_member_weights()
 
     def _check_member_means(self):
         if not self._forecast_prepared:
@@ -119,23 +138,39 @@ class GaussianEM(object):
     N_ITER = 2000
     E_TOL = 1e-5
 
-    def __init__(self, member_count):
-        # General attributes
-        self._member_count = member_count
-        self._dim = 1  # Dimensionality of output
+    def __init__(self, grouping):
+        # Grouping arguments
+        self.grouping = grouping
+        self.group_count = len(set(grouping))
+        self.group_map = \
+            np.array([find(g, grouping) for g in range(self.group_count)])
+        self.members_per_group = [len(g) for g in self.group_map]
+        self.member_count = len(grouping)
         # Model parameters
-        self.variance_prior_W = 1  # Matrix of dim x dim, 0 means no prior.
+        self._dim = 1  # Dimensionality of output
+        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
         self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
-        self.variances = np.ones(self._member_count)
+        self.variances = np.ones(self.group_count)
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones(self._member_count) * 1.5  # All ones means no prior
-        self.weights = np.ones(self._member_count) / self._member_count
+            np.ones(self.group_count)  # All ones means no prior
+        self.weights = np.ones(self.group_count) / self.member_count
+
+    def get_member_variances(self):
+        """Return variances for each member.
+        Effectively does a mapping from the group id to the group variance."""
+        return self.variances[self.grouping]
+
+    def get_member_weights(self):
+        """Return weights for each member.
+        Effectively does a mapping from the group id to the group weight."""
+        return self.weights[self.grouping]
 
     def fit(self, X, y):
         """Run the EM algorithm with the last solution as prior.
         If there is no last solution a uniform prior is used."""
-        assert self._member_count == X.shape[1], \
+        # Number of columns must match the number of ensemble members
+        assert len(self.grouping) == X.shape[1], \
             "Data does not fit the model."
         assert X.shape[0] == y.shape[0], \
             "Mismatch between data and observations."
@@ -147,22 +182,16 @@ class GaussianEM(object):
         self.squared_errors = _squared_error_calculation(X, y)
         self.responsibility = np.zeros(X.shape)
         while iter_count < self.N_ITER and not self._converged:
-            # print(iter_count)
             # Algorithm tests
             try:
-                assert_almost_equal(self.weights.sum(), 1.0, 6)
+                assert_almost_equal(self.get_member_weights().sum(), 1.0, 6)
             except AssertionError:
-                print("Weights don't sum to 1!")
-                import pdb
-                pdb.set_trace()
+                print("weights don't sum to 1!")
             if np.any(self.weights < 0) or np.any(self.weights > 1):
-                print("error in weights!")
-                import pdb
-                pdb.set_trace()
+                print("weights no longer probabilities!")
             if np.any(np.isnan(self.variances)) or np.any(self.variances < 0):
-                print("error in variances!")
-                import pdb
-                pdb.set_trace()
+                print("singularity in variances!")
+            # Core
             try:
                 self.e_step()
                 self.m_step()
@@ -171,7 +200,7 @@ class GaussianEM(object):
                 # Singularity detected.
                 # Perturb parameters with random noise and restart fit.
                 # print("Singularity detected - perturbing")
-                print("Perturbing!")
+                print("singularity: perturbing coefficients!")
                 self.perturb_singularities()
             iter_count += 1
 
@@ -183,14 +212,14 @@ class GaussianEM(object):
         #     print("Log: BMA did not converge within %d iterations." %
         #           self.N_ITER)
         # print("Log likelihood: %f" % self.log_likelihood)
-        # print("Member weights: ", self.weights)
-        # print("Member variances: ", self.variances)
+        # print("Member weights: ", self.get_member_weights())
+        # print("Member variances: ", self.get_member_variances())
+
+        # Clear large matrices
         self.responsibility = None
         self.squared_errors = None
 
     def perturb_singularities(self):
-        import pdb
-        pdb.set_trace()
         singularity_index = np.logical_or(np.logical_or(
             self.variances <= 1e-30,
             np.isinf(self.variances)),
@@ -199,7 +228,7 @@ class GaussianEM(object):
             np.random.rand(singularity_index.sum()) * 2
         self.weights[singularity_index] = 1e-30
 
-        # Renormalize
+        # Renormalize weights
         self.weights /= self.weights.sum()
 
     # TODO Test
@@ -210,13 +239,14 @@ class GaussianEM(object):
         See for example
         https://hips.seas.harvard.edu/blog/2013/01/09/computing-log-sum-exp/
         """
-        # Calculate proportional responsibility
+        # Part 1 : calculate proportional responsibility
         new_responsibility = \
-            _log_normal_pdf(self.squared_errors, self.variances)
+            _log_normal_pdf(self.squared_errors, self.get_member_variances())
         # TODO Weights can go to 0. Taking logarithm will give singularities.
-        new_responsibility += np.log(self.weights)
-        new_loglik = 0
-        # Update log-likelihood and normalize responsibility
+        new_responsibility += np.log(self.get_member_weights())
+        new_loglik = 0.
+
+        # Part 2: update log-likelihood and normalize above responsibilities
         # Use log-sum-exp trick.
         # Find maximum value per row
         max_per_row = new_responsibility.max(axis=1)
@@ -226,14 +256,9 @@ class GaussianEM(object):
         ).transpose().sum(axis=1)
         # Normalize each row
         loglik_per_row = max_per_row + np.log(norm_per_row)
-        new_responsibility2 = np.exp(
+        new_responsibility = np.exp(
             new_responsibility.transpose() - loglik_per_row
         ).transpose()
-        if (new_responsibility2 == 0).all(axis=0).any():
-            print("Singularity column in responsibility matrix")
-            import pdb
-            pdb.set_trace()
-        new_responsibility = new_responsibility2
         new_loglik = loglik_per_row.sum()
         self.responsibility = new_responsibility
         self._converged = \
@@ -243,34 +268,40 @@ class GaussianEM(object):
     # TODO Test
     def m_step(self):
         """"""
-        # TODO Adding prior information leads to singularities. Figure out why.
         # Normalization constant per column
         norm_per_col = self.responsibility.sum(axis=0)
+        norm_per_col = group_column_vec(norm_per_col, self.group_map)
+        # Weighed square error value per column
         error_sum_per_col = \
             (self.responsibility * self.squared_errors).sum(axis=0)
-        # new_variances_no_prior = error_sum_per_col / norm_per_col
-        # Variance update formula
+        error_sum_per_col = group_column_vec(error_sum_per_col, self.group_map)
+
+        # Variance update formulae
         # The extra parentheses are necessary to force simplification of
         # computation
+        new_variances = error_sum_per_col / norm_per_col
         new_variances = \
             (error_sum_per_col + self.variance_prior_W) / \
             (norm_per_col + (self.variance_prior_nu - self._dim - 1))
 
+        assert len(new_variances) == self.group_count, \
+            "dimension error in variances"
+
         if np.any(np.isnan(new_variances)) or np.any(new_variances < 0) \
            or np.any(np.isinf(new_variances)):
             print("error in variance computation!")
-            import pdb
-            pdb.set_trace()
 
         # Mixing coefficient update
-        N = self.squared_errors.shape[0]
-        # new_weights_no_prior = norm_per_col / N
         # Weight update formula
         # The extra parentheses are necessary to force simplification of
         # computation
+        N = self.squared_errors.shape[0]
+        # new_weights = norm_per_col / N
         new_weights = \
             (norm_per_col + (self.weight_prior - 1)) / \
             (N + (self.weight_prior - 1).sum())
+        assert len(new_weights) == self.group_count, \
+            "dimension error in weights"
 
         # Do assignment
         self.variances = new_variances

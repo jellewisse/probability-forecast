@@ -32,13 +32,15 @@ def pipeline(element_id, issue, forecast_hours):
 
     # Ensemble definition
     model_names = ["eps", "control", "fc"]
-    # ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
-    ens_cols = ['2T_EPS01']
+    ens_cols = ['2T_EPS' + str(x).zfill(2) for x in range(1, 51)]
+    grouping = [0] * 50
+    # ens_cols = ['2T_EPS01']
     # ens_cols = []
     ens_cols.append('2T_CONTROL')
     ens_cols.append('2T_FC')
+    grouping += [1, 2]
     obs_col = '2T_OBS'
-    model = GaussianMixtureModel(len(ens_cols))
+    model = GaussianMixtureModel(len(ens_cols), grouping)
     # Load data
     full_data = cached_load_data(
         element_id,
