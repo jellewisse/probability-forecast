@@ -1,0 +1,13 @@
+011 - 2 meter temperature (K)
+015 - maximum 2 meter temperature of past X hours (K)
+016 - minimum 2 meter temperature of past X hours (K)
+017 - 2 meter dewpoint temperature (K)
+033 - 10 meter U wind component (m/s)
+034 - 10 meter V wind component (m/s)
+061 - total precipitation (m)
+071 - total cloud cover
+073 - low cloud cover
+074 - medium cloud cover
+075 - high cloud cover
+078 - snowfall, convective (kg/m2)
+079 - snowfall, large scale (kg/m2)

@@ -1,0 +1,11 @@
+table2Version
+indicatorOfParameter
+shortName
+level
+dataDate
+dataTime
+stepUnits
+startStep
+endStep
+perturbationNumber
+numberOfForecastsInEnsemble
