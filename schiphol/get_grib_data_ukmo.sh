@@ -7,7 +7,7 @@ gridLong=4.790283679962158
 # TODO Make argument
 gribdir="/data/archive/model/ukmo/"
 
-basedir="./schiphol/"
+basedir="./"
 paramdir=${basedir}data/
 datadir=${basedir}data/grib/
 
@@ -31,7 +31,7 @@ processFile_ukmo(){
     # Argument 2: input variable
     input_variable=${2}
     # Extract grib data
-    lines=`grib_ls -p ${col_headers} -w indicatorOfParameter:d=input_variable,level:d=0 -l ${gridLat},${gridLong},4 ${input_file}`
+    lines=`grib_ls -x -p ${col_headers} -w indicatorOfParameter:d=${input_variable},level:d=0 -l ${gridLat},${gridLong},4 ${input_file}`
     # Compress spaces, remove trailing whitespace and header line.
     lines=`echo "${lines}" | tr -s ' ' | sed 's/[ \t]*$//' | tail -n +2`
 
@@ -81,11 +81,13 @@ echo "$nr_forecast_hours forecast hours read for processing."
 readLines "variables" "${paramdir}variable_ids_ukmo.txt"
 nr_variables=${#variables[*]}
 echo "$nr_variables variables read for processing."
+
+# UKMO Model definition
 model_prefixes[0]="mmm_ukmo"
 nr_models=${#model_prefixes[@]}
 
 # Model issues
-model_issues[0]=0
+model_issues[0]=00
 model_issues[1]=12
 nr_issues=${#model_issues[@]}
 
@@ -96,7 +98,7 @@ for((m=0; m<${nr_models}; m++)); do
     model_prefix=${model_prefixes[m]}
 
     # Loop over model issues
-    for((k=0; k<${nr_issues}; k++)); do
+    for((k=0; k<1; k++)); do
         issue_time=${model_issues[k]}
 
         # Loop over elements
@@ -113,25 +115,26 @@ for((m=0; m<${nr_models}; m++)); do
                     
                     # Loop over forecast hours
                     for ((h=0; h<${nr_forecast_hours}; h++)); do
-                      forecast_hour=${forecast_hours[h]}
-                      
-                      # Loop core for ukmo
-                      file_path=${gribdir}${model_prefix}_${date}${issue_time}_${forecast_hour}.grb
-                      echo ${file_path}
-                      file_count=$((file_count+1))
-                      # Process file: sets ${data_lines}
-                      #processFile_ukmo ${file_path} ${variable}
-                      echo "Processed ${file_count} files.."
-                      # Concatenate data
-                      # Check if full_data is empty
-                      #if [ ${#full_data[@]} -eq 0 ]; then
-                          # Set full_data equal to data_lines
-                          #full_data=${data_lines}
-                      #else
-                          # Concatenate data_lines to full_data
-                          #data_lines=`echo "${data_lines}" | tail -n +2` # Strip off header line.
-                          #full_data=`echo -e "${full_data}\n${data_lines}"`
-                      #fi
+                        forecast_hour=${forecast_hours[h]}
+                        
+                        # Loop core for ukmo
+                        file_path=${gribdir}${model_prefix}_${date}${issue_time}_${forecast_hour}.grb
+                        echo ${file_path}
+                        file_count=$((file_count+1))
+                        # The processFile function sets ${data_lines}
+                        processFile_ukmo ${file_path} ${variable}
+                        echo "Processed ${file_count} files.."
+                        # Concatenate data
+                        # Check if full_data is empty
+                        if [ ${#full_data[@]} -eq 0 ]; then
+                            # Set full_data equal to data_lines
+                            full_data=${data_lines}
+                        else
+                            # Concatenate data_lines to full_data
+                            data_lines=`echo "${data_lines}" | tail -n +2` # Strip off header line.
+                            full_data=`echo -e "${full_data}\n${data_lines}"`
+                        fi
+                    done
                 done
             fi
 
