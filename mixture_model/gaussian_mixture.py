@@ -26,8 +26,6 @@ def _log_normal_pdf(squared_errors, variances):
     P += (-1.0 / 2) * np.log(variances)
     P += NORM_CONSTANT
     if np.any(np.isnan(P)):
-        import pdb
-        pdb.set_trace()
         raise ZeroDivisionError("Singularity in log normal pdfs.")
     return P
 
@@ -37,10 +35,10 @@ def find(needle, haystack):
     return [x for (x, val) in enumerate(haystack) if needle == val]
 
 
-def group_column_vec(X, grouping):
+def group_column_vec(X, group_map):
     """Averages elements in X based on the provided grouping index"""
     assert len(X.shape) == 1, "no vector provided"
-    return np.dstack([X[g].mean() for g in grouping]).squeeze()
+    return np.array([np.take(X, g).sum() for g in group_map])
 
 
 class GaussianMixtureModel(MixtureModel):
@@ -146,14 +144,17 @@ class GaussianEM(object):
             np.array([find(g, grouping) for g in range(self.group_count)])
         self.members_per_group = [len(g) for g in self.group_map]
         self.member_count = len(grouping)
+
         # Model parameters
+        # Parameters are defined per group, meaning they are the same for all
+        # group members by definition.
         self._dim = 1  # Dimensionality of output
-        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
-        self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
+        self.variance_prior_W = 1  # Matrix of dim x dim, 0 means no prior.
+        self.variance_prior_nu = 3  # Scalar value, 2 means no prior.
         self.variances = np.ones(self.group_count)
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones(self.group_count)  # All ones means no prior
+            np.ones(self.group_count) * 2  # All ones means no prior
         self.weights = np.ones(self.group_count) / self.member_count
 
     def get_member_variances(self):
@@ -191,8 +192,11 @@ class GaussianEM(object):
                 print("weights no longer probabilities!")
             if np.any(np.isnan(self.variances)) or np.any(self.variances < 0):
                 print("singularity in variances!")
+
             # Core
             try:
+                # TODO If the result of a step means a
+                # NaN parameter, do fallback
                 self.e_step()
                 self.m_step()
                 self.log_liks.append(self.log_likelihood)
@@ -279,14 +283,15 @@ class GaussianEM(object):
         # Variance update formulae
         # The extra parentheses are necessary to force simplification of
         # computation
-        new_variances = error_sum_per_col / norm_per_col
+        # new_variances = error_sum_per_col / norm_per_col
+        # TODO I have not yet verified whether the equations for variance
+        # are correct when using groups
         new_variances = \
             (error_sum_per_col + self.variance_prior_W) / \
             (norm_per_col + (self.variance_prior_nu - self._dim - 1))
 
         assert len(new_variances) == self.group_count, \
             "dimension error in variances"
-
         if np.any(np.isnan(new_variances)) or np.any(new_variances < 0) \
            or np.any(np.isinf(new_variances)):
             print("error in variance computation!")
@@ -300,8 +305,13 @@ class GaussianEM(object):
         new_weights = \
             (norm_per_col + (self.weight_prior - 1)) / \
             (N + (self.weight_prior - 1).sum())
+        new_weights /= self.members_per_group
         assert len(new_weights) == self.group_count, \
             "dimension error in weights"
+
+        if np.any(np.isnan(new_weights)) \
+           or np.any(np.isinf(new_variances)):
+            print("error in weight computation!")
 
         # Do assignment
         self.variances = new_variances
