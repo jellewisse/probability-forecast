@@ -1,4 +1,4 @@
-# gaussian_mixture.py
+"""Module for BMA with Gaussian mixtures."""
 import numpy as np
 from numpy.testing import assert_almost_equal
 from scipy.stats import norm
@@ -15,13 +15,13 @@ NORM_CONSTANT = -0.5 * np.log(2 * np.pi)
 
 
 def _log_normal_pdf(squared_errors, variances):
-    """
+    """Calculate the log Normal PDF function.
+
     parameters:
     -----------
     squared_errors: matrix (n x m)
     variances: vector (m)
     """
-
     P = squared_errors * (-1.0 / (2.0 * variances))
     P += (-1.0 / 2) * np.log(variances)
     P += NORM_CONSTANT
@@ -31,21 +31,21 @@ def _log_normal_pdf(squared_errors, variances):
 
 
 def find(needle, haystack):
-    """Returns the indices in haystack equivalent to needle"""
+    """Return the indices in haystack equivalent to needle."""
     return [x for (x, val) in enumerate(haystack) if needle == val]
 
 
 def group_column_vec(X, group_map):
-    """Averages elements in X based on the provided grouping index"""
+    """Average elements in X based on the provided grouping index."""
     assert len(X.shape) == 1, "no vector provided"
     return np.array([np.take(X, g).sum() for g in group_map])
 
 
 class GaussianMixtureModel(MixtureModel):
-    """"""
+    """Base class for Gaussian Mixtures."""
 
     def __init__(self, member_count, grouping=None):
-        """Initialize a univariate normal Gaussian Mixture Model
+        """Initialize a univariate normal Gaussian Mixture Model.
 
         Parameters
         ----------
@@ -63,14 +63,15 @@ class GaussianMixtureModel(MixtureModel):
         self._optimizer = GaussianEM(grouping)
 
     def fit(self, X, y):
-        """
+        """Fitting the GMM with the provided data.
+
         Parameters
         ----------
         X : array_like, shape (n_samples, n_members)
             Input data, one column for each ensemble member
         y : array_like, shape (n_samples,)
             Targets for input data
-            """
+        """
         assert X.shape[1] == self.member_count, "Bad number of member inputs"
         assert X.shape[0] == y.shape[0], "Input and targets do not match."
         assert len(y.shape) == 1, "Provided y is not a vector."
@@ -97,24 +98,28 @@ class GaussianMixtureModel(MixtureModel):
             raise AttributeError("No ensemble values available for dressing.")
 
     def set_member_means(self, member_means):
+        """Clamp forecast model means to the GMM."""
         assert len(member_means) == self.member_count
         for (mean, member) in zip(member_means, self._members):
             member.parameters['loc'] = mean
         self._forecast_prepared = True
 
     def get_member_means(self):
+        """Return forecast model means of members."""
         return [
             member.parameters['loc'] - member.bias
             for member in self._members
         ]
 
     def get_member_variances(self):
+        """Return fitted member variances."""
         return [
             member.parameters['scale']
             for member in self._members
         ]
 
     def mean(self):
+        """Return the GMM mean forecast."""
         self._check_member_means()
         return sum([
             (member.parameters['loc'] - member.bias) * weight
@@ -123,20 +128,25 @@ class GaussianMixtureModel(MixtureModel):
         ])
 
     def pdf(self, x):
+        """Apply the GMM PDF function."""
         self._check_member_means()
         return super().pdf(x)
 
     def cdf(self, x):
+        """Apply the GMM CDF function."""
         self._check_member_means()
         return super().cdf(x)
 
 
 class GaussianEM(object):
+    """Computation class for BMA on top of a GMM."""
+
     # Constants
     N_ITER = 2000
     E_TOL = 1e-5
 
     def __init__(self, grouping):
+        """Class constructor."""
         # Grouping arguments
         self.grouping = grouping
         self.group_count = len(set(grouping))
@@ -159,17 +169,23 @@ class GaussianEM(object):
 
     def get_member_variances(self):
         """Return variances for each member.
-        Effectively does a mapping from the group id to the group variance."""
+
+        Effectively does a mapping from the group id to the group variance.
+        """
         return self.variances[self.grouping]
 
     def get_member_weights(self):
         """Return weights for each member.
-        Effectively does a mapping from the group id to the group weight."""
+
+        Effectively does a mapping from the group id to the group weight.
+        """
         return self.weights[self.grouping]
 
     def fit(self, X, y):
         """Run the EM algorithm with the last solution as prior.
-        If there is no last solution a uniform prior is used."""
+
+        If there is no last solution a uniform prior is used.
+        """
         # Number of columns must match the number of ensemble members
         assert len(self.grouping) == X.shape[1], \
             "Data does not fit the model."
@@ -205,7 +221,7 @@ class GaussianEM(object):
                 # Perturb parameters with random noise and restart fit.
                 # print("Singularity detected - perturbing")
                 print("singularity: perturbing coefficients!")
-                self.perturb_singularities()
+                self._perturb_singularities()
             iter_count += 1
 
         # Cleanup
@@ -223,7 +239,7 @@ class GaussianEM(object):
         self.responsibility = None
         self.squared_errors = None
 
-    def perturb_singularities(self):
+    def _perturb_singularities(self):
         singularity_index = np.logical_or(np.logical_or(
             self.variances <= 1e-30,
             np.isinf(self.variances)),
@@ -237,8 +253,8 @@ class GaussianEM(object):
 
     # TODO Test
     def e_step(self):
-        """
-        E-step
+        """E-step.
+
         Underflow errors are accounted for with the log-sum-exp trick.
         See for example
         https://hips.seas.harvard.edu/blog/2013/01/09/computing-log-sum-exp/
@@ -271,7 +287,7 @@ class GaussianEM(object):
 
     # TODO Test
     def m_step(self):
-        """"""
+        """M-step."""
         # Normalization constant per column
         norm_per_col = self.responsibility.sum(axis=0)
         norm_per_col = group_column_vec(norm_per_col, self.group_map)

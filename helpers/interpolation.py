@@ -139,7 +139,7 @@ def nearest_grid_point_interpolate(lat, lon, forecasts,
 
 def interpolate(lat, lon,
                 forecasts, lats, lons, dists,
-                forecast_fun=nearest_grid_point_interpolate):
+                forecast_fun=bilinear_interpolate):
     """General interpolation function."""
 
     assert len(forecasts.columns) == 4, "Bad number of grid points provided."

@@ -1,23 +1,18 @@
-# data_assimilation.py
+"""Wrapper module for combining data cleaning and loading."""
+
 import pandas as pd
+from math import isnan
 
 # User modules
 from helpers import data_readers
-from helpers.interpolation import (
-    interpolate,
-    bilinear_interpolate as intpl
-)
-
+from helpers.interpolation import interpolate
+from helpers.constants import SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON
 # For now these are hard-coded since there only is one station
-STATION_LAT = 52.31555938720703
-STATION_LON = 4.790283679962158
 
 
-# TODO Test
 def _get_element_key(model_name, perturbation_id,
                      nr_perturbations, element_name):
-    """"""
-
+    """Translate the given properties into a canonical column name."""
     # Offset by 1 - counting starts at 0.
     max_nr_digits = len(str(nr_perturbations))
     if (perturbation_id == 0 and nr_perturbations == 0) or \
@@ -29,12 +24,8 @@ def _get_element_key(model_name, perturbation_id,
     return element_name.upper() + '_' + model_name.upper() + perturb_name
 
 
-# TODO Test
-def regroup_dataframe(forecast_data, model_name):
-    """"""
-
-    element_name = forecast_data.iloc[0]['element_name']
-
+def regroup_dataframe(forecast_data, model_name, element_name):
+    """Reorder multi-row forecast into a single row."""
     # Define columns necessary for finding groups
     grouping = forecast_data.groupby([
         'ec_table_id', 'element_id', 'element_name',
@@ -86,14 +77,12 @@ def regroup_dataframe(forecast_data, model_name):
 
 
 # TODO Test
-def transform_forecast_group_data(forecast_data, model_name):
-    """"""
-
-    element_name = forecast_data.iloc[0]['element_name']
+def transform_forecast_group_data(forecast_data, model_name, element_name):
+    """Wrapper method for renaming forecast data columns."""
     nr_perturbations = forecast_data.iloc[0]['numberOfForecastsInEnsemble']
 
     # Don't regroup if there are no perturbations
-    if nr_perturbations == 0:
+    if nr_perturbations == 0 or isnan(nr_perturbations):
         # Rename and drop the right columns.
         forecast_data.rename(
             columns={
@@ -104,7 +93,8 @@ def transform_forecast_group_data(forecast_data, model_name):
         )
     else:
         # Regroup data
-        forecast_data = regroup_dataframe(forecast_data, model_name)
+        forecast_data = \
+            regroup_dataframe(forecast_data, model_name, element_name)
 
     forecast_data.drop(
         ['perturbationNumber', 'numberOfForecastsInEnsemble', 'element_name',
@@ -115,54 +105,79 @@ def transform_forecast_group_data(forecast_data, model_name):
 
 
 # TODO Test
-def load_and_interpolate_forecast(interpolation_func,
-                                  model, element_id, issue):
-    """Loads a given dataset of forecast data with interpolated values."""
+def load_and_interpolate_forecast(model, element_id, element_name, issue):
+    """Load a given dataset of forecast data with interpolated values.
 
-    # Forecast columns
+    parameters
+    ----------
+    model: str, name of model
+    element_id: int, id of parameter under the provided model
+    issue: str, string representation of the model issue hour
+    """
+    # Forecast columns: 1 to 4
     forecast_cols = ['value' + str(x) for x in range(1, 5)]
-
-    # meta-forecast data
-    lats, lons, dists = data_readers.read_meta_data(model, element_id, issue)
 
     # Read in forecast
     forecast_data = data_readers.read_forecast_data(model, element_id, issue)
 
-    interpolated_forecast = interpolate(
-        STATION_LAT, STATION_LON,
-        forecast_data.ix[:, forecast_cols], lats, lons, dists,
-        interpolation_func
-    )
+    # Check whether to do any interpolation
+    empty_columns = \
+        forecast_data.ix[:, forecast_cols].isnull().values.any(axis=0)
+    if empty_columns.sum() == 3:
+        # Just a single column provided. Don't do interpolation.
+        print("Not interpolating for model %s ad element %s" %
+              (model, str(element_id)))
+        # Select non-empty column
+        interpolated_forecast = forecast_data.ix[:, ~empty_columns]
+    else:
+        # Do interpolation using meta-data
+        lats, lons, dists = \
+            data_readers.read_meta_data(model, element_id, issue)
+        # TODO Schiphol station location is hard coded right now
+        interpolated_forecast = interpolate(
+            SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON,
+            forecast_data.ix[:, forecast_cols], lats, lons, dists
+        )
     forecast_data['interpolated_forecast'] = interpolated_forecast
 
     # Drop grid point data.
     forecast_data.drop(forecast_cols, axis=1, inplace=True)
 
     # Transform EPS data from row format to column format
-    forecast_data = transform_forecast_group_data(forecast_data, model)
+    forecast_data = \
+        transform_forecast_group_data(forecast_data, model, element_name)
 
     return forecast_data
 
 
-def add_observations(forecast_data):
-    """"""
+def add_observations(forecast_data, element_id):
+    """Merge observations into provided forecast data."""
+    # TODO Hack. Fix me.
+    # if element_id == 999:
+    #     observations = data_readers.read_observations(model, element_id)
+    # else:
+    observations = data_readers.read_knmi_observations()
     return pd.DataFrame.merge(
-        forecast_data, data_readers.read_observations(),
+        forecast_data, observations,
         copy=False
     )
 
 
-def load_data(element_id, issue, model_names):
-    """"""
+def load_data(element_name, issue, model_names):
+    """Wrapper function for loading and combining several models."""
     # Load data for specific models
     data = pd.DataFrame()
     for model_name in model_names:
-        model_data = \
-            load_and_interpolate_forecast(intpl, model_name, element_id, issue)
+        element_id = data_readers.get_element_id(element_name, model_name)
+        model_data = load_and_interpolate_forecast(
+            model_name, element_id, element_name, issue)
         if data.empty:
             data = model_data
         else:
             data = pd.merge(data, model_data, copy=False, how='outer')
-    data = add_observations(data)
+
+    # Add observations to data
+    obs_element_id = data_readers.get_element_id(element_name, "fc")
+    data = add_observations(data, obs_element_id)
     data.sort_values('valid_date', ascending=True, inplace=True)
     return data

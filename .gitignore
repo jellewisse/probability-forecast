@@ -4,6 +4,7 @@
 # Data folders
 tmp/
 grib/
+obs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
