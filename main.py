@@ -119,8 +119,18 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             full_data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
             full_data.loc[index, '2T_ENSEMBLE_PDF'] = model.pdf(y_test)
             full_data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(y_test)
+
+            threshold_cdfs = model.cdf(thresholds)
             full_data.loc[index, '2T_CRPS'] = \
-                metrics.crps(thresholds, model.cdf(thresholds), y_test)
+                metrics.crps(thresholds, threshold_cdfs, y_test)
+
+            # Calculate percentiles
+            # percentiles = np.arange(1, 100, 1) / 100
+            # perc_values = metrics.percentiles(model.cdf, percentiles)
+            #
+            # # import pdb
+            # import matplotlib.pyplot as plt
+            # pdb.set_trace()
 
             # For determining the ensemble verification rank / calibration
             # Rank only makes sense if the ensemble weights are uniformly

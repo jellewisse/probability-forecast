@@ -1,4 +1,4 @@
-# base.py
+"""Base module for statistical model mixtures."""
 import abc
 import numpy as np
 
@@ -29,10 +29,10 @@ def _maximum_likelihood_std(X, y):
 
 
 class MixtureModel(object, metaclass=abc.ABCMeta):
-    """"""
+    """Base class for statistical model mixtures."""
 
     def __init__(self, member_count, distribution):
-        """Initialize a mixture model with a specific distribution
+        """Initialize a mixture model with a specific distribution.
 
         Parameters
         ----------
@@ -48,10 +48,11 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def fit(self, X, y):
-        """Fit the model parameters"""
+        """Fit the model parameters."""
 
     def pdf(self, x):
-        """Compute the model mixture PDF for a single sample
+        """Compute the model mixture PDF for a single sample.
+
         Parameters:
         -----------
         x : list
@@ -63,7 +64,8 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
         ])
 
     def member_pdf(self, X, y):
-        """Given a data matrix, compute the pdf values for each member
+        """Given a data matrix, compute the pdf values for each member.
+
         parameters:
         -----------
         v : ndarray
@@ -79,7 +81,7 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
         return P
 
     def cdf(self, x):
-        """Compute the model mixture CDF"""
+        """Compute the model mixture CDF."""
         return sum([
             member.cdf(x) * weight
             for (member, weight)
