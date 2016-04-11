@@ -22,7 +22,14 @@ def _is_cdf_valid(case):
 
 
 def crps(thresholds, case, actual):
-    """Calculate the CRPS for a single observation and distribution."""
+    """Calculate the CRPS for a single observation and distribution.
+
+    Parameters
+    ----------
+    thresholds: list, threshold representation of the tested CDF
+    case: list, CDF values at the provided threshold values
+    actual: float, observation value
+    """
     crps = 0
     # Check whether the right number of prediction bins has been provided
     # and whether it encodes a cumulative distribution.
@@ -38,7 +45,7 @@ def crps(thresholds, case, actual):
 
 
 def mean_crps(thresholds, predictions, actuals):
-    """ Calculate the Continuous Ranked Probability Score.
+    """Calculate the Continuous Ranked Probability Score.
 
     Parameters
     ----------
@@ -63,19 +70,20 @@ def _nearly_equal(a, b, tol):
 
 
 # Test
-def percentiles(cdf_fun, percentiles):
+def percentiles(cdf_fun, percentiles, init_value=None):
     """Return scores corresponding to given percentiles."""
     assert np.logical_and(percentiles < 1, percentiles > 0).all()
 
     values = [math.nan] * len(percentiles)
-    cdfs = [math.nan] * len(percentiles)
     # TODO Find better initialization of last_value.
-    last_value = -30.0 + 273.15
+    if init_value is None:
+        last_value = -25.0 + 273.15
+    else:
+        last_value = init_value
 
     # Simple uniform search scheme
-    # step_size = 0.5  # Expressed in value
-    step_size = 0.1
-    # tolerance = 0.01  # Expressed in probability mass
+    step_size = 0.8  # Expressed in value
+    tolerance = 0.03  # Expressed in probability mass
     for count, percentile in enumerate(percentiles):
         # print("Finding percentile %.2f" % percentile)
         fringe = last_value
@@ -90,21 +98,19 @@ def percentiles(cdf_fun, percentiles):
         #  fringe >= percentile_value
         #  cdf(fringe) < cdf(percentile_value + step_size)
 
-        # # Simple binary search
-        # factor = 1
-        # sign = -1
-        # while not _nearly_equal(fringe_cdf, percentile, tolerance):
-        #     fringe += factor * sign * step_size
-        #     fringe_cdf = cdf_fun(fringe)
-        #     # print('%.2f, %.2f' % (fringe, fringe_cdf))
-        #     if fringe_cdf > percentile:
-        #         sign = -1
-        #     else:
-        #         sign = 1
-        #     factor /= 2
-        # print("Found the percentile.")
+        # Simple binary search
+        factor = 1
+        sign = -1
+        while not _nearly_equal(fringe_cdf, percentile, tolerance):
+            fringe += factor * sign * step_size
+            fringe_cdf = cdf_fun(fringe)
+            # print('%.2f, %.2f' % (fringe, fringe_cdf))
+            if fringe_cdf > percentile:
+                sign = -1
+            else:
+                sign = 1
+            factor /= 2
         values[count] = fringe
-        cdfs[count] = fringe_cdf
-        print('%.2f, %.2f' % (percentile, fringe_cdf))
+        # print('%.2f, %.2f' % (percentile, fringe_cdf))
         last_value = fringe
     return values

@@ -9,8 +9,9 @@ from time import time
 from mixture_model.gaussian_mixture import GaussianMixtureModel
 from helpers.data_assimilation import load_data
 import helpers.plotting as plot
-from helpers import constants
+from helpers import data_readers
 from helpers import metrics
+
 
 # Configure cache
 CACHE_DIR = '.cache'
@@ -78,7 +79,7 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             "Each valid date should only have a single prediction"
 
         # Prediction intervals
-        thresholds = np.arange(-30, 30, 1) + 273.15
+        thresholds = np.arange(-30, 30, 0.5) + 273.15
         model_weights = []
         model_variances = []
         plot_valid_dates = []
@@ -86,6 +87,11 @@ def pipeline(element_name, model_names, issue, forecast_hours):
         # Moving window prediction
         row_count = 0
         for index, row in data.iterrows():
+
+            # If one of the model prediction forecasts is unavailable, skip.
+            if row[ens_cols].isnull().any():
+                continue
+
             # Select data
             valid_date = row['valid_date']
             first_date = valid_date - pd.DateOffset(days=lag + train_days)
@@ -96,7 +102,7 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             ].dropna(axis=0, subset=ens_cols)
             if len(train_data) < (train_days * 0.5):
                 # print(
-                #     "Not enough training days (%s / %d), skipping date %s." % (
+                #   "Not enough training days (%s / %d), skipping date %s." % (
                 #         str(len(train_data)).zfill(2), train_days,
                 #         str(valid_date)))
                 continue
@@ -110,46 +116,58 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             model_weights.append(model.weights)
             model_variances.append(model.get_member_variances())
             plot_valid_dates.append(valid_date)
+
             # Predict
             model.set_member_means(X_test)
 
             # Verify
-            full_data.loc[index, '2T_BELOW_DEGREE_PROB'] = \
-                model.cdf(273.15 + constants.THRESHOLD)
-            full_data.loc[index, '2T_ENSEMBLE_MEAN'] = model.mean()
-            full_data.loc[index, '2T_ENSEMBLE_PDF'] = model.pdf(y_test)
-            full_data.loc[index, '2T_ENSEMBLE_CDF'] = model.cdf(y_test)
-
+            # Ensemble PDF
+            full_data.loc[index, element_name + '_ENSEMBLE_PDF'] = \
+                model.pdf(y_test)
+            # Ensemble CDF
+            full_data.loc[index, element_name + '_ENSEMBLE_CDF'] = \
+                model.cdf(y_test)
+            # CRPS
             threshold_cdfs = model.cdf(thresholds)
-            full_data.loc[index, '2T_CRPS'] = \
+            full_data.loc[index, element_name + '_CRPS'] = \
                 metrics.crps(thresholds, threshold_cdfs, y_test)
+            # Ensemble mean
+            full_data.loc[index, element_name + '_ENXSEMBLE_MEAN'] = \
+                model.mean()
+            # Percentiles
+            perc_start_time = time()
+            # percentiles = np.array([1, 10, 25, 50, 75, 90, 99])
+            percentiles = np.arange(1, 99, 1)
+            perc_values = \
+                metrics.percentiles(model.cdf, percentiles / 100, y_test - 15)
+            for percentile, value in zip(percentiles, perc_values):
+                name = element_name + '_ENSEMBLE_PERC' + str(percentile)
+                full_data.loc[index, name] = value
+            print("Done with %s: %.3fs" %
+                  (str(valid_date), time() - perc_start_time))
 
-            # Calculate percentiles
-            # percentiles = np.arange(1, 100, 1) / 100
-            # perc_values = metrics.percentiles(model.cdf, percentiles)
-            #
-            # # import pdb
-            # import matplotlib.pyplot as plt
-            # pdb.set_trace()
-
-            # For determining the ensemble verification rank / calibration
+            # For determining the ensemble verification rank / calibrationl
             # Rank only makes sense if the ensemble weights are uniformly
             # distributed.
             obs_in_forecasts = list(model.get_member_means()) + list([y_test])
             obs_in_forecasts.sort()
-            full_data.loc[index, '2T_OBS_RANK'] = \
+            full_data.loc[index, element_name + '_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
             row_count += 1
+            # if valid_date >= datetime(2015, 2, 14, tzinfo=timezone.utc):
+            #     import pdbdata.
+            #     pdb.set_trace()
+
             # plot.plot_distribution(model, row[obs_col], valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
-        modified_weights = np.array(model_weights)[:, [0, 50, 51, 52]]
-        modified_weights[:, 0] *= 50
-        plot.plot_model_weights(
-            plot_valid_dates, modified_weights,
-            forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
-        plot.plot_model_variances(
-            plot_valid_dates, np.array(model_variances)[:, [0, 50, 51, 52]],
-            forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
+        # modified_weights = np.array(model_weights)[:, [0, 50, 51, 52]]
+        # modified_weights[:, 0] *= 50
+        # plot.plot_model_weights(
+        #     plot_valid_dates, modified_weights,
+        #     forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
+        # plot.plot_model_variances(
+        #     plot_valid_dates, np.array(model_variances)[:, [0, 50, 51, 52]],
+        #     forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
     return full_data
 
 
@@ -159,8 +177,8 @@ def do_verification(data, forecast_hour):
     plot.plot_verification_rank_histogram(hourly_data)
     plot.plot_PIT_histogram(hourly_data)
     plot.plot_sharpness_histogram(hourly_data)
-    a, b, c = plot.calculate_threshold_hits(hourly_data)
-    plot.plot_relialibilty_sharpness_diagram(a, b, c)
+    # a, b, c = plot.calculate_threshold_hits(hourly_data)
+    # plot.plot_relialibilty_sharpness_diagram(a, b, c)
     mean_crps = hourly_data['2T_CRPS'].mean()
     print("Mean CRPS: %f" % (mean_crps))
     deterministic_MAE = \
@@ -170,6 +188,13 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 48 + 1, 3)
+    forecast_hours = np.arange(24, 24 + 1, 3)
     model_names = ["eps", "control", "fc", "ukmo"]
     data = pipeline("2T", model_names, "0", forecast_hours)
+
+    # Write predictions to file
+    data.sort_values(['issue_date', 'forecast_hour'],
+                     ascending=True, inplace=True)
+    file_path = 'output/' + '_'.join(model_names) + '_' + \
+        str(forecast_hours[0]) + '_' + str(forecast_hours[-1]) + '.csv'
+    data_readers.write_csv(data, file_path)

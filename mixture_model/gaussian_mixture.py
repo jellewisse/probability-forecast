@@ -15,7 +15,7 @@ NORM_CONSTANT = -0.5 * np.log(2 * np.pi)
 
 
 def _log_normal_pdf(squared_errors, variances):
-    """Calculate the log Normal PDF function.
+    """Calculate the log Normal PDF function for an isotropic normal dist.
 
     parameters:
     -----------
@@ -110,6 +110,12 @@ class GaussianMixtureModel(MixtureModel):
             member.parameters['loc'] - member.bias
             for member in self._members
         ]
+
+    def set_member_variances(self, member_variances):
+        """Modify the member variances explicitly."""
+        assert len(member_variances) == self.member_count
+        for (variance, member) in zip(member_variances, self._members):
+            member.parameters['scale'] = variance
 
     def get_member_variances(self):
         """Return fitted member variances."""

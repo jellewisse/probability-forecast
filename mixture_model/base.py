@@ -90,18 +90,18 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
 
 
 class MixtureMember(object):
-    """"""
+    """Base class for mixture member."""
 
     def __init__(self, distribution):
-        """"""
+        """Initialize the member with a distribution class."""
         self.distribution = distribution  # Distribution function
         self.parameters = {}  # Distribution function keyword arguments
         self.bias = 0  # Additive bias vector
 
     def pdf(self, X):
-        """"""
+        """Compute the member PDF."""
         return self.distribution.pdf(X - self.bias, **self.parameters)
 
     def cdf(self, X):
-        """"""
+        """Compute the member CDF."""
         return self.distribution.cdf(X - self.bias, **self.parameters)

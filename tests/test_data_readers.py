@@ -23,11 +23,11 @@ def test_read_forecast_data(file_parameters):
     data_readers.read_forecast_data(**file_parameters)
 
 
-def test_read_observations():
+def test_read_knmi_observations():
     """Tests whether the station observations can be loaded."""
     # Test function relevant imports
     import helpers.data_readers as data_readers
-    obs_data = data_readers.read_observations()
+    obs_data = data_readers.read_knmi_observations()
     assert len(obs_data) != 0, "Observation data is empty."
 
 

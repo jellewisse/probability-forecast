@@ -223,3 +223,8 @@ def read_meta_data(model, element_id, issue, file_path=None):
         distance[count] = float(line[dist_index:(dist_index + 5)])
 
     return latitude, longitude, distance
+
+
+def write_csv(data_frame, file_path):
+    """Write the provided dataframe as CSV to the path specified."""
+    data_frame.to_csv(file_path, index=False)

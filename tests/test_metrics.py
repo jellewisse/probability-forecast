@@ -1,8 +1,13 @@
+"""Test module for the metrics package."""
+
 import math
+import numpy as np
+from scipy.stats import norm
 from numpy.testing import assert_almost_equal
 
 
 class TestCrps:
+    """Test suite for the validity of the CRPS."""
 
     @classmethod
     def setup_class(self):
@@ -29,7 +34,7 @@ class TestCrps:
         print(pred)
         crps = metrics.mean_crps(self.thresholds, pred, self.actuals)
         print("Invalid length for one case: answer = {0}".format(crps))
-        assert_almost_equal(crps, 1.0/4)  # since one case is wrong
+        assert_almost_equal(crps, 1.0 / 4)  # since one case is wrong
 
     def test_invalid_cdf(self):
         from helpers import metrics
@@ -39,7 +44,7 @@ class TestCrps:
         print(pred)
         crps = metrics.mean_crps(self.thresholds, pred, self.actuals)
         print("Invalid CDF for one case: answer = {0}".format(crps))
-        assert_almost_equal(crps, 1.0/4)  # since one case is wrong
+        assert_almost_equal(crps, 1.0 / 4)  # since one case is wrong
 
     def test_all_zeros(self):
         from helpers import metrics
@@ -48,7 +53,7 @@ class TestCrps:
         crps = metrics.mean_crps(self.thresholds, pred, self.actuals)
         print("All zero predictions: answer = {0}".format(crps))
         # all zero for actual=3 is wrong for thresholds 4,6,8,10
-        expected = (4 + 5 + 2 + 4)/20.0
+        expected = (4 + 5 + 2 + 4) / 20.0
         assert_almost_equal(crps, expected)
 
     def test_all_ones(self):
@@ -58,12 +63,12 @@ class TestCrps:
         crps = metrics.mean_crps(self.thresholds, pred, self.actuals)
         print("All one predictions: answer = {0}".format(crps))
         # all one for actual=3 is wrong for threshold=2 i.e. 1 threshold
-        expected = (1 + 0 + 3 + 1)/20.0
+        expected = (1 + 0 + 3 + 1) / 20.0
         assert_almost_equal(crps, expected)
 
     def sigmoid(self, center):
         length = len(self.thresholds)
-        return [1 / (1 + math.exp(-(x-center))) for x in range(0, length)]
+        return [1 / (1 + math.exp(-(x - center))) for x in range(0, length)]
 
     def test_sigmoid(self):
         from helpers import metrics
@@ -72,3 +77,19 @@ class TestCrps:
         crps = metrics.mean_crps(self.thresholds, pred, self.actuals)
         print("Sigmoids: answer = {0}".format(crps))
         assert_almost_equal(crps, 0.36, 2)
+
+
+class TestPercentiles:
+    """Test suite for calculating PDF percentiles."""
+
+    def test_normal_ppf(self):
+        """Compare the percentiles function to the scipy ppf function."""
+        from helpers import metrics
+        cdf_fun = norm.cdf
+
+        percentiles = np.arange(1, 99, 1) / 100
+        loc = 0
+        scale = 1
+        target_percentiles = norm.ppf(percentiles, loc=loc, scale=scale)
+        comparison_percentiles = metrics.percentiles(cdf_fun, percentiles, -10)
+        assert_almost_equal(target_percentiles, comparison_percentiles, 2)
