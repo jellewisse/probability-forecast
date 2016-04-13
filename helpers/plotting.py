@@ -29,7 +29,7 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     D.dropna(axis=0, inplace=True, subset=other_columns)
 
     # Do plotting
-    fig, ax = plt.subplots(1)
+    fig, ax = plt.subplots(1, figsize=(20, 10))
     nr_classes = int(len(percentiles) / 2)
     cm = cb.get_map('Blues', 'Sequential', nr_classes).hex_colors
     # Coverage fields
@@ -74,7 +74,8 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     plt.title(
         "Wing temperature probability forecast for +%dh" % (forecast_hour))
     plt.grid(True)
-    plt.show()
+    plt.savefig("output/img/twing_percentile_%dfh.png" % forecast_hour)
+    # plt.show()
 
 
 def plot_model_parameters(valid_dates, model_weights, model_variances,
@@ -114,7 +115,8 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
               forecast_hour)
     plt.legend(names[valid_columns])
     fig.autofmt_xdate()
-    plt.show()
+    plt.savefig("output/img/model_parameters_%dfh.png" % forecast_hour)
+    # plt.show()
 
 
 def get_bins(nr_bins, left_lim=0, right_lim=1):

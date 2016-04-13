@@ -4,7 +4,7 @@ import pandas as pd
 from math import isnan
 
 # User modules
-from helpers import data_readers
+from helpers import data_io
 from helpers.interpolation import interpolate
 from helpers.constants import SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON
 # For now these are hard-coded since there only is one station

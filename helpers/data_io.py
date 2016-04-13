@@ -228,4 +228,5 @@ def read_meta_data(model, element_id, issue, file_path=None):
 
 def write_csv(data_frame, file_path):
     """Write the provided dataframe as CSV to the path specified."""
-    data_frame.dropna().to_csv(file_path, index=False)
+    data_frame.dropna().to_csv(
+        file_path, index=False, float_format='%f')

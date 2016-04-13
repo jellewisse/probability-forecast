@@ -9,7 +9,7 @@ from time import time
 from mixture_model.gaussian_mixture import GaussianMixtureModel
 from helpers.data_assimilation import load_data
 import helpers.plotting as plot
-from helpers import data_readers
+from helpers import data_io
 from helpers import metrics
 
 
@@ -131,6 +131,8 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             # Ensemble CDF
             full_data.loc[index, element_name + '_ENSEMBLE_CDF'] = \
                 model.cdf(y_test)
+            full_data.loc[index, element_name + '_ENSEMBLE_CDF_FREEZE'] = \
+                model.cdf(273.15)
             # CRPS
             threshold_cdfs = model.cdf(thresholds)
             full_data.loc[index, element_name + '_CRPS'] = \
@@ -170,10 +172,10 @@ def pipeline(element_name, model_names, issue, forecast_hours):
         print("Done (%.2fs)." % (time() - fh_time))
         plot.plot_ensemble_percentiles(
             forecast_hour, percentiles, element_name, full_data)
-        # plot.plot_model_parameters(
-        #     plot_valid_dates, model_weights, model_variances,
-        #     forecast_hour, ens_cols)
-    return full_data
+        plot.plot_model_parameters(
+            plot_valid_dates, model_weights, model_variances,
+            forecast_hour, ens_cols)
+    return full_data.drop(ens_cols, axis=1)
 
 
 def do_verification(data, forecast_hour):
@@ -192,7 +194,7 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 24 + 1, 3)
+    forecast_hours = np.arange(0, 48 + 1, 3)
     model_names = ["control", "fc", "ukmo"]
     element_name = "TWING"
     data = pipeline(element_name, model_names, "0", forecast_hours)
@@ -202,4 +204,4 @@ if __name__ == "__main__":
                      ascending=True, inplace=True)
     file_path = 'output/' + element_name + '_' + '_'.join(model_names) + '_' \
         + str(forecast_hours[0]) + '_' + str(forecast_hours[-1]) + '.csv'
-    data_readers.write_csv(data, file_path)
+    data_io.write_csv(data, file_path)
