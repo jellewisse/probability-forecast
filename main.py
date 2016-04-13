@@ -71,6 +71,10 @@ def pipeline(element_name, model_names, issue, forecast_hours):
               (fh_count + 1, len(forecast_hours)))
         data = full_data[full_data.forecast_hour == forecast_hour]
 
+        if len(data) == 0:
+            print("No data for this forecast hour. Skipping.")
+            continue
+
         # TODO Write results to other dataframe than original data
         # The dates to predict for
         lag = _calculate_lag(forecast_hour)
@@ -89,7 +93,7 @@ def pipeline(element_name, model_names, issue, forecast_hours):
         for index, row in data.iterrows():
 
             # If one of the model prediction forecasts is unavailable, skip.
-            if row[ens_cols].isnull().any():
+            if row[ens_cols + [obs_col]].isnull().any():
                 continue
 
             # Select data
@@ -99,7 +103,7 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             # TODO Selection might be expensive. Alternative is to index first.
             train_data = data[
                 (data.valid_date <= last_date) & (data.valid_date > first_date)
-            ].dropna(axis=0, subset=ens_cols)
+            ].dropna(axis=0, subset=ens_cols + [obs_col])
             if len(train_data) < (train_days * 0.5):
                 # print(
                 #   "Not enough training days (%s / %d), skipping date %s." % (
@@ -132,12 +136,11 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             full_data.loc[index, element_name + '_CRPS'] = \
                 metrics.crps(thresholds, threshold_cdfs, y_test)
             # Ensemble mean
-            full_data.loc[index, element_name + '_ENXSEMBLE_MEAN'] = \
+            full_data.loc[index, element_name + '_ENSEMBLE_MEAN'] = \
                 model.mean()
             # Percentiles
             perc_start_time = time()
-            # percentiles = np.array([1, 10, 25, 50, 75, 90, 99])
-            percentiles = np.arange(1, 99, 1)
+            percentiles = np.array([1, 10, 25, 75, 90, 99])
             perc_values = \
                 metrics.percentiles(model.cdf, percentiles / 100, y_test - 15)
             for percentile, value in zip(percentiles, perc_values):
@@ -155,19 +158,21 @@ def pipeline(element_name, model_names, issue, forecast_hours):
                 obs_in_forecasts.index(y_test)
             row_count += 1
             # if valid_date >= datetime(2015, 2, 14, tzinfo=timezone.utc):
-            #     import pdbdata.
+            #     import pdb
             #     pdb.set_trace()
 
             # plot.plot_distribution(model, row[obs_col], valid_date)
+            # TODO For debugging.
+            # plot.plot_distribution(
+            #     model,
+            #     full_data.loc[index, element_name + '_ENSEMBLE_MEAN'],
+            #     valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
-        # modified_weights = np.array(model_weights)[:, [0, 50, 51, 52]]
-        # modified_weights[:, 0] *= 50
-        # plot.plot_model_weights(
-        #     plot_valid_dates, modified_weights,
-        #     forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
-        # plot.plot_model_variances(
-        #     plot_valid_dates, np.array(model_variances)[:, [0, 50, 51, 52]],
-        #     forecast_hour, np.array(ens_cols)[[0, 50, 51, 52]])
+        plot.plot_ensemble_percentiles(
+            forecast_hour, percentiles, element_name, full_data)
+        # plot.plot_model_parameters(
+        #     plot_valid_dates, model_weights, model_variances,
+        #     forecast_hour, ens_cols)
     return full_data
 
 
@@ -176,7 +181,6 @@ def do_verification(data, forecast_hour):
     hourly_data = data[data.forecast_hour == forecast_hour]
     plot.plot_verification_rank_histogram(hourly_data)
     plot.plot_PIT_histogram(hourly_data)
-    plot.plot_sharpness_histogram(hourly_data)
     # a, b, c = plot.calculate_threshold_hits(hourly_data)
     # plot.plot_relialibilty_sharpness_diagram(a, b, c)
     mean_crps = hourly_data['2T_CRPS'].mean()
@@ -188,13 +192,14 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(24, 24 + 1, 3)
-    model_names = ["eps", "control", "fc", "ukmo"]
-    data = pipeline("2T", model_names, "0", forecast_hours)
+    forecast_hours = np.arange(0, 24 + 1, 3)
+    model_names = ["control", "fc", "ukmo"]
+    element_name = "TWING"
+    data = pipeline(element_name, model_names, "0", forecast_hours)
 
     # Write predictions to file
     data.sort_values(['issue_date', 'forecast_hour'],
                      ascending=True, inplace=True)
-    file_path = 'output/' + '_'.join(model_names) + '_' + \
-        str(forecast_hours[0]) + '_' + str(forecast_hours[-1]) + '.csv'
+    file_path = 'output/' + element_name + '_' + '_'.join(model_names) + '_' \
+        + str(forecast_hours[0]) + '_' + str(forecast_hours[-1]) + '.csv'
     data_readers.write_csv(data, file_path)

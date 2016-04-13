@@ -1,31 +1,119 @@
+"""Module containing methods for plotting."""
+
 import numpy as np
 import operator as op
 from math import isnan
+import brewer2mpl as cb
 import matplotlib.pyplot as plt
 
 # User modules
 from . import constants
 
 
-def plot_model_variances(valid_dates, model_variances, forecast_hour, names):
-    plt.plot(valid_dates, model_variances)
-    plt.grid(True)
+def plot_ensemble_percentiles(forecast_hour, percentiles,
+                              element_name, data):
+    """Plot the probability distribution using the specified percentiles."""
+    assert len(percentiles) % 2 == 0, "number of percentiles should be even."
+    # Sort percentiles in ascending order
+    percentiles = sorted(percentiles)
+    percentile_columns = [
+        element_name + '_ENSEMBLE_PERC' + str(percentile)
+        for percentile in percentiles
+    ]
+    other_columns = \
+        ['valid_date', element_name + '_OBS', element_name + '_ENSEMBLE_MEAN']
+
+    # Select percentile data for the specified forecast hour
+    D = data[data.forecast_hour == forecast_hour]
+    D = D[percentile_columns + other_columns]
+    D.dropna(axis=0, inplace=True, subset=other_columns)
+
+    # Do plotting
+    fig, ax = plt.subplots(1)
+    nr_classes = int(len(percentiles) / 2)
+    cm = cb.get_map('Blues', 'Sequential', nr_classes).hex_colors
+    # Coverage fields
+    for i in range(nr_classes):
+        print("Plotting surface between %s and %s" %
+              (percentile_columns[i], percentile_columns[-i - 1]))
+        ax.fill_between(
+            D['valid_date'].values,
+            D[percentile_columns[i]].values - 273.15,
+            D[percentile_columns[-i - 1]].values - 273.15,
+            color=cm[i],
+            edgecolor=cm[i],
+            interpolate=False,
+            label="%d%% coverage" % (percentiles[-i - 1] - percentiles[i])
+        )
+
+    # Plot mean
+    plt.plot(
+        D['valid_date'].values, D[element_name + '_ENSEMBLE_MEAN'] - 273.15,
+        color='black',
+        linewidth=1,
+        linestyle='--',
+        alpha=0.5,
+        label='Mean'
+    )
+
+    # Plot observations
+    plt.plot(
+        D['valid_date'].values, D[element_name + '_OBS'].values - 273.15,
+        color='black',
+        linewidth=0,
+        marker='^',
+        label='Observations'
+    )
+
+    fig.autofmt_xdate()
+    # ax.fmt_xdata = mdates.DateFormatter('%Y-%m-%d')
+    # plt.legend(names)
+    plt.legend(numpoints=1)
     plt.xlabel("Valid date")
-    plt.ylabel("Model variance")
-    plt.title("Model variances for valid dates on forecast hour %d" %
-              forecast_hour)
-    plt.legend(names)
+    plt.ylabel("Temperature (C°)")
+    plt.title(
+        "Wing temperature probability forecast for +%dh" % (forecast_hour))
+    plt.grid(True)
     plt.show()
 
 
-def plot_model_weights(valid_dates, model_weights, forecast_hour, names):
-    plt.plot(valid_dates, model_weights)
+def plot_model_parameters(valid_dates, model_weights, model_variances,
+                          forecast_hour, names):
+    # Convert parameters to workable format
+    model_weights = np.array(model_weights)
+    model_variances = np.array(model_variances)
+    names = np.array(names)
+    # Only show a single line for EPS members.
+    first_member_found = False
+    valid_columns = []
+    for count, name in enumerate(names):
+        if 'EPS' in name and not first_member_found:
+            first_member_found = True
+            names[count] = names[count][:-2]  # Cut off perturbation number
+        elif 'EPS' in name:
+            continue
+        # Mark column as valid
+        valid_columns.append(count)
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(211)
+    ax1.plot(valid_dates, model_weights[:, valid_columns])
     plt.grid(True)
     plt.xlabel("Valid date")
     plt.ylabel("Model contribution")
     plt.title("Model weights for valid dates on forecast hour %d" %
               forecast_hour)
-    plt.legend(names)
+    plt.legend(names[valid_columns])
+
+    ax2 = fig.add_subplot(212, sharex=ax1)
+    ax2.plot(valid_dates, model_variances[:, valid_columns])
+    plt.grid(True)
+    plt.xlabel("Valid date")
+    plt.ylabel("Model variance")
+    plt.title("Model variances for valid dates on forecast hour %d" %
+              forecast_hour)
+    plt.legend(names[valid_columns])
+    fig.autofmt_xdate()
     plt.show()
 
 

@@ -88,7 +88,8 @@ class GaussianMixtureModel(MixtureModel):
                 self._optimizer.get_member_variances(),
                 bias_per_model):
             member.parameters['scale'] = model_std
-            member.bias = model_bias
+            member.bias = 0
+            # member.bias = model_bias
 
         # Update weights
         self.weights = self._optimizer.get_member_weights()
@@ -101,13 +102,13 @@ class GaussianMixtureModel(MixtureModel):
         """Clamp forecast model means to the GMM."""
         assert len(member_means) == self.member_count
         for (mean, member) in zip(member_means, self._members):
-            member.parameters['loc'] = mean
+            member.parameters['loc'] = mean - member.bias
         self._forecast_prepared = True
 
     def get_member_means(self):
         """Return forecast model means of members."""
         return [
-            member.parameters['loc'] - member.bias
+            member.parameters['loc']
             for member in self._members
         ]
 

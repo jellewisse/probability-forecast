@@ -16,7 +16,8 @@ def _get_element_key(model_name, perturbation_id,
     # Offset by 1 - counting starts at 0.
     max_nr_digits = len(str(nr_perturbations))
     if (perturbation_id == 0 and nr_perturbations == 0) or \
-       model_name == 'control':
+       (nr_perturbations == 1) or \
+       (model_name == 'control'):
         perturb_name = ''
     else:
         perturb_name = str(perturbation_id).zfill(max_nr_digits)
@@ -125,10 +126,11 @@ def load_and_interpolate_forecast(model, element_id, element_name, issue):
         forecast_data.ix[:, forecast_cols].isnull().values.any(axis=0)
     if empty_columns.sum() == 3:
         # Just a single column provided. Don't do interpolation.
-        print("Not interpolating for model %s ad element %s" %
+        print("Not interpolating for model '%s' and element '%s'" %
               (model, str(element_id)))
         # Select non-empty column
-        interpolated_forecast = forecast_data.ix[:, ~empty_columns]
+        non_empty_col = forecast_cols[(~empty_columns).nonzero()[0][0]]
+        interpolated_forecast = forecast_data[non_empty_col]
     else:
         # Do interpolation using meta-data
         lats, lons, dists = \
@@ -146,17 +148,16 @@ def load_and_interpolate_forecast(model, element_id, element_name, issue):
     # Transform EPS data from row format to column format
     forecast_data = \
         transform_forecast_group_data(forecast_data, model, element_name)
-
     return forecast_data
 
 
 def add_observations(forecast_data, element_id):
     """Merge observations into provided forecast data."""
     # TODO Hack. Fix me.
-    # if element_id == 999:
-    #     observations = data_readers.read_observations(model, element_id)
-    # else:
-    observations = data_readers.read_knmi_observations()
+    if element_id == 999:
+        observations = data_readers.read_observations(element_id)
+    else:
+        observations = data_readers.read_knmi_observations()
     return pd.DataFrame.merge(
         forecast_data, observations,
         copy=False

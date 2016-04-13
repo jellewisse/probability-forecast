@@ -7,30 +7,30 @@ from datetime import timezone, datetime, timedelta
 from helpers.constants import FILE_PATH
 
 
-def get_element_name(model, element_id):
+def get_element_name(element_id):
+    # TODO Remove dependency on model for parameter id.
     """Hard coded mapping of element ids to meaningful names."""
-    if model == "fc" or model == 'control' or model == 'eps':
-        element_dict = {
-            # 121: maximum 2 meter temperature of past 6 hours (K),
-            # 122: minimum 2 meter temperature of past 6 hours (K),
-            # 123: 10 meter wind gust of past 6 hours (m/s),
-            # 144: snowfall, convective and stratiform (m),
-            # 164: total cloud cover,
-            # 165: 10 meter U wind component (m/s),
-            # 166: 10 meter V wind component (m/s),
-            # 167: 2 meter temperature (K),
-            # 168: 2 meter dewpoint temperature (K),
-            # 186: low cloud cover,
-            # 187: medium cloud cover,
-            # 188: high cloud cover,
-            # 228: total precipitation (m)
-            999: 'twing'  # 999: Wing temperature (K)
-        }
-
+    element_dict = {
+        # 121: maximum 2 meter temperature of past 6 hours (K),
+        # 122: minimum 2 meter temperature of past 6 hours (K),
+        # 123: 10 meter wind gust of past 6 hours (m/s),
+        # 144: snowfall, convective and stratiform (m),
+        # 164: total cloud cover,
+        # 165: 10 meter U wind component (m/s),
+        # 166: 10 meter V wind component (m/s),
+        # 167: 2 meter temperature (K),
+        # 168: 2 meter dewpoint temperature (K),
+        # 186: low cloud cover,
+        # 187: medium cloud cover,
+        # 188: high cloud cover,
+        # 228: total precipitation (m)
+        999: 'TWING'  # 999: Wing temperature (K)
+    }
     return element_dict[element_id]
 
 
 def get_element_id(element_name, model):
+    # TODO Remove dependency on model for parameter id.
     """Hard coded mapping of meaningful names to element ids."""
     if element_name == "2T":
         if model == "fc" or model == 'control' or model == 'eps' \
@@ -38,6 +38,8 @@ def get_element_id(element_name, model):
             return 167
         elif model == "ukmo":
             return 11
+    elif element_name == "TWING":
+        return 999
 
 
 def convert_temperature_deci_degrees_to_kelvin(T):
@@ -115,13 +117,12 @@ def read_knmi_observations():
     return obs_data
 
 
-def read_observations(model, element_id):
+def read_observations(element_id):
     """Load observation file for given element."""
     # TODO Element id depends on the model it comes from, sadly.
     # Add a mapping that also takes the model name into account.
 
-    column_name = get_element_name(model, element_id)
-    print(column_name)
+    column_name = get_element_name(element_id)
     obs_data = pd.read_csv(
         FILE_PATH + 'grib/data_obs_' + str(element_id) + '.csv',
         na_values='',
@@ -132,7 +133,7 @@ def read_observations(model, element_id):
 
     obs_data.rename(
         columns={
-            'twing': 'Twing_obs',
+            column_name: column_name + '_OBS',
         },
         inplace=True
     )
@@ -227,4 +228,4 @@ def read_meta_data(model, element_id, issue, file_path=None):
 
 def write_csv(data_frame, file_path):
     """Write the provided dataframe as CSV to the path specified."""
-    data_frame.to_csv(file_path, index=False)
+    data_frame.dropna().to_csv(file_path, index=False)
