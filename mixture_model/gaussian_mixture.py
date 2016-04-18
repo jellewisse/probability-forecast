@@ -166,12 +166,12 @@ class GaussianEM(object):
         # Parameters are defined per group, meaning they are the same for all
         # group members by definition.
         self._dim = 1  # Dimensionality of output
-        self.variance_prior_W = 1  # Matrix of dim x dim, 0 means no prior.
-        self.variance_prior_nu = 3  # Scalar value, 2 means no prior.
+        self.variance_prior_W = 4  # Matrix of dim x dim, 0 means no prior.
+        self.variance_prior_nu = 5  # Scalar value, 2 means no prior.
         self.variances = np.ones(self.group_count)
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones(self.group_count) * 2  # All ones means no prior
+            np.ones(self.group_count) * 1.1  # All ones means no prior
         self.weights = np.ones(self.group_count) / self.member_count
 
     def get_member_variances(self):
@@ -198,6 +198,10 @@ class GaussianEM(object):
             "Data does not fit the model."
         assert X.shape[0] == y.shape[0], \
             "Mismatch between data and observations."
+
+        # TODO Temporary lines for testing influence of re-initialization
+        # self.weights = np.ones(self.group_count) / self.member_count
+        # self.variances = np.ones(self.group_count)
 
         iter_count = 0
         self.log_liks = []
@@ -312,11 +316,15 @@ class GaussianEM(object):
         new_variances = \
             (error_sum_per_col + self.variance_prior_W) / \
             (norm_per_col + (self.variance_prior_nu - self._dim - 1))
-
+        # if np.any(new_variances > 3):
+        #     print("Large variances detected.")
+        #     import pdb
+        #     pdb.set_trace()
         assert len(new_variances) == self.group_count, \
             "dimension error in variances"
-        if np.any(np.isnan(new_variances)) or np.any(new_variances < 0) \
-           or np.any(np.isinf(new_variances)):
+        if np.any(np.isnan(new_variances)) or np.any(np.isinf(new_variances)):
+            print("singularity in variance computation!")
+        if np.any(new_variances < 0):
             print("error in variance computation!")
 
         # Mixing coefficient update
@@ -334,7 +342,7 @@ class GaussianEM(object):
 
         if np.any(np.isnan(new_weights)) \
            or np.any(np.isinf(new_variances)):
-            print("error in weight computation!")
+            print("singularity in weight computation!")
 
         # Do assignment
         self.variances = new_variances

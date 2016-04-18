@@ -119,7 +119,7 @@ def load_and_interpolate_forecast(model, element_id, element_name, issue):
     forecast_cols = ['value' + str(x) for x in range(1, 5)]
 
     # Read in forecast
-    forecast_data = data_readers.read_forecast_data(model, element_id, issue)
+    forecast_data = data_io.read_forecast_data(model, element_id, issue)
 
     # Check whether to do any interpolation
     empty_columns = \
@@ -134,7 +134,7 @@ def load_and_interpolate_forecast(model, element_id, element_name, issue):
     else:
         # Do interpolation using meta-data
         lats, lons, dists = \
-            data_readers.read_meta_data(model, element_id, issue)
+            data_io.read_meta_data(model, element_id, issue)
         # TODO Schiphol station location is hard coded right now
         interpolated_forecast = interpolate(
             SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON,
@@ -155,9 +155,9 @@ def add_observations(forecast_data, element_id):
     """Merge observations into provided forecast data."""
     # TODO Hack. Fix me.
     if element_id == 999:
-        observations = data_readers.read_observations(element_id)
+        observations = data_io.read_observations(element_id)
     else:
-        observations = data_readers.read_knmi_observations()
+        observations = data_io.read_knmi_observations()
     return pd.DataFrame.merge(
         forecast_data, observations,
         copy=False
@@ -169,7 +169,7 @@ def load_data(element_name, issue, model_names):
     # Load data for specific models
     data = pd.DataFrame()
     for model_name in model_names:
-        element_id = data_readers.get_element_id(element_name, model_name)
+        element_id = data_io.get_element_id(element_name, model_name)
         model_data = load_and_interpolate_forecast(
             model_name, element_id, element_name, issue)
         if data.empty:
@@ -178,7 +178,7 @@ def load_data(element_name, issue, model_names):
             data = pd.merge(data, model_data, copy=False, how='outer')
 
     # Add observations to data
-    obs_element_id = data_readers.get_element_id(element_name, "fc")
+    obs_element_id = data_io.get_element_id(element_name, "fc")
     data = add_observations(data, obs_element_id)
     data.sort_values('valid_date', ascending=True, inplace=True)
     return data

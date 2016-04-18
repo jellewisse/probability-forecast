@@ -76,6 +76,7 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     plt.grid(True)
     plt.savefig("output/img/twing_percentile_%dfh.png" % forecast_hour)
     # plt.show()
+    fig.clear()
 
 
 def plot_model_parameters(valid_dates, model_weights, model_variances,
@@ -117,6 +118,7 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     fig.autofmt_xdate()
     plt.savefig("output/img/model_parameters_%dfh.png" % forecast_hour)
     # plt.show()
+    fig.clear()
 
 
 def get_bins(nr_bins, left_lim=0, right_lim=1):

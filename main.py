@@ -141,15 +141,15 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             full_data.loc[index, element_name + '_ENSEMBLE_MEAN'] = \
                 model.mean()
             # Percentiles
-            perc_start_time = time()
-            percentiles = np.array([1, 10, 25, 75, 90, 99])
-            perc_values = \
-                metrics.percentiles(model.cdf, percentiles / 100, y_test - 15)
-            for percentile, value in zip(percentiles, perc_values):
-                name = element_name + '_ENSEMBLE_PERC' + str(percentile)
-                full_data.loc[index, name] = value
-            print("Done with %s: %.3fs" %
-                  (str(valid_date), time() - perc_start_time))
+            # perc_start_time = time()
+            # percentiles = np.array([1, 10, 25, 75, 90, 99])
+            # perc_values = \
+            #     metrics.percentiles(model.cdf, percentiles / 100, y_test - 15)
+            # for percentile, value in zip(percentiles, perc_values):
+            #     name = element_name + '_ENSEMBLE_PERC' + str(percentile)
+            #     full_data.loc[index, name] = value
+            # print("Done with %s: %.3fs" %
+            #       (str(valid_date), time() - perc_start_time))
 
             # For determining the ensemble verification rank / calibrationl
             # Rank only makes sense if the ensemble weights are uniformly
@@ -170,12 +170,16 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             #     full_data.loc[index, element_name + '_ENSEMBLE_MEAN'],
             #     valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
-        plot.plot_ensemble_percentiles(
-            forecast_hour, percentiles, element_name, full_data)
+        # plot.plot_ensemble_percentiles(
+        #     forecast_hour, percentiles, element_name, full_data)
         plot.plot_model_parameters(
             plot_valid_dates, model_weights, model_variances,
             forecast_hour, ens_cols)
     return full_data.drop(ens_cols, axis=1)
+
+
+def fooplot(data):
+    pass
 
 
 def do_verification(data, forecast_hour):
@@ -194,7 +198,7 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 48 + 1, 3)
+    forecast_hours = np.arange(13, 13 + 1, 1)
     model_names = ["control", "fc", "ukmo"]
     element_name = "TWING"
     data = pipeline(element_name, model_names, "0", forecast_hours)
