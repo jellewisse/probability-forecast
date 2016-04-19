@@ -3,31 +3,6 @@ import abc
 import numpy as np
 
 
-def _squared_error_calculation(X, y):
-    return np.square(_error_calculation(X, y))
-
-
-def _error_calculation(X, y):
-
-    # Numpy column-wise subtraction is expressed as row-wise subtraction.
-    E = (X.transpose() - y).transpose()
-    return E
-
-
-def _maximum_likelihood_bias(X, y):
-    # Calculate errors
-    errors = _error_calculation(X, y)
-    # Calculate maximum likelihood means per column
-    return errors.mean(axis=0)
-
-
-def _maximum_likelihood_std(X, y):
-    # Calculate errors
-    errors = _error_calculation(X, y)
-    # Calculate maximum likelihood means per column
-    return errors.std(axis=0)
-
-
 class MixtureModel(object, metaclass=abc.ABCMeta):
     """Base class for statistical model mixtures."""
 

@@ -7,6 +7,7 @@ from time import time
 
 # User modules
 from mixture_model.gaussian_mixture import GaussianMixtureModel
+from bias_corrector.simple_correctors import SimpleBiasCorrector
 from helpers.data_assimilation import load_data
 import helpers.plotting as plot
 from helpers import data_io
@@ -61,8 +62,11 @@ def pipeline(element_name, model_names, issue, forecast_hours):
     # Ensemble definition
     grouping, ens_cols = _model_to_group(model_names, element_name)
     obs_col = element_name + '_OBS'
-    model = GaussianMixtureModel(len(ens_cols), grouping)
+    model_mix = GaussianMixtureModel(len(ens_cols), grouping)
     train_days = 40
+
+    # Bias corrector definition
+    model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
 
     # Loop over forecast hours
     for fh_count, forecast_hour in enumerate(forecast_hours):
@@ -84,8 +88,9 @@ def pipeline(element_name, model_names, issue, forecast_hours):
 
         # Prediction intervals
         thresholds = np.arange(-30, 30, 0.5) + 273.15
-        model_weights = []
-        model_variances = []
+        model_mix_weights = []
+        model_mix_variances = []
+        model_bias_intercepts = []
         plot_valid_dates = []
 
         # Moving window prediction
@@ -115,46 +120,53 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             X_test = row[ens_cols].as_matrix()
             y_test = row[obs_col]
 
-            # Train
-            model.fit(X_train, y_train)
-            model_weights.append(model.weights)
-            model_variances.append(model.get_member_variances())
+            # Train bias model
+            model_bias.fit(X_train, y_train)
+            X_train = model_bias.predict(X_train)
+
+            # Train mixture model
+            model_mix.fit(X_train, y_train)
+            model_mix_weights.append(model_mix.weights)
+            model_mix_variances.append(model_mix.get_member_variances())
+            model_bias_intercepts.append(model_bias.intercept_per_model)
             plot_valid_dates.append(valid_date)
 
             # Predict
-            model.set_member_means(X_test)
+            X_test = model_bias.predict(X_test)
+            model_mix.set_member_means(X_test)
 
             # Verify
             # Ensemble PDF
             full_data.loc[index, element_name + '_ENSEMBLE_PDF'] = \
-                model.pdf(y_test)
+                model_mix.pdf(y_test)
             # Ensemble CDF
             full_data.loc[index, element_name + '_ENSEMBLE_CDF'] = \
-                model.cdf(y_test)
+                model_mix.cdf(y_test)
             full_data.loc[index, element_name + '_ENSEMBLE_CDF_FREEZE'] = \
-                model.cdf(273.15)
+                model_mix.cdf(273.15)
             # CRPS
-            threshold_cdfs = model.cdf(thresholds)
+            threshold_cdfs = model_mix.cdf(thresholds)
             full_data.loc[index, element_name + '_CRPS'] = \
                 metrics.crps(thresholds, threshold_cdfs, y_test)
             # Ensemble mean
             full_data.loc[index, element_name + '_ENSEMBLE_MEAN'] = \
-                model.mean()
+                model_mix.mean()
             # Percentiles
-            # perc_start_time = time()
-            # percentiles = np.array([1, 10, 25, 75, 90, 99])
-            # perc_values = \
-            #     metrics.percentiles(model.cdf, percentiles / 100, y_test - 15)
-            # for percentile, value in zip(percentiles, perc_values):
-            #     name = element_name + '_ENSEMBLE_PERC' + str(percentile)
-            #     full_data.loc[index, name] = value
-            # print("Done with %s: %.3fs" %
-            #       (str(valid_date), time() - perc_start_time))
+            perc_start_time = time()
+            percentiles = np.array([1, 10, 25, 75, 90, 99])
+            perc_values = metrics.percentiles(
+                model_mix.cdf, percentiles / 100, y_test - 15)
+            for percentile, value in zip(percentiles, perc_values):
+                name = element_name + '_ENSEMBLE_PERC' + str(percentile)
+                full_data.loc[index, name] = value
+            print("Done with %s: %.3fs" %
+                  (str(valid_date), time() - perc_start_time))
 
             # For determining the ensemble verification rank / calibrationl
             # Rank only makes sense if the ensemble weights are uniformly
             # distributed.
-            obs_in_forecasts = list(model.get_member_means()) + list([y_test])
+            obs_in_forecasts = \
+                list(model_mix.get_member_means()) + list([y_test])
             obs_in_forecasts.sort()
             full_data.loc[index, element_name + '_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
@@ -163,17 +175,18 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             #     import pdb
             #     pdb.set_trace()
 
-            # plot.plot_distribution(model, row[obs_col], valid_date)
+            # plot.plot_distribution(model_mix, row[obs_col], valid_date)
             # TODO For debugging.
             # plot.plot_distribution(
-            #     model,
+            #     model_mix,
             #     full_data.loc[index, element_name + '_ENSEMBLE_MEAN'],
             #     valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
-        # plot.plot_ensemble_percentiles(
-        #     forecast_hour, percentiles, element_name, full_data)
+        plot.plot_ensemble_percentiles(
+            forecast_hour, percentiles, element_name, full_data)
         plot.plot_model_parameters(
-            plot_valid_dates, model_weights, model_variances,
+            plot_valid_dates, model_mix_weights, model_mix_variances,
+            model_bias_intercepts,
             forecast_hour, ens_cols)
     return full_data.drop(ens_cols, axis=1)
 
@@ -198,7 +211,7 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(13, 13 + 1, 1)
+    forecast_hours = np.arange(0, 48 + 1, 1)
     model_names = ["control", "fc", "ukmo"]
     element_name = "TWING"
     data = pipeline(element_name, model_names, "0", forecast_hours)

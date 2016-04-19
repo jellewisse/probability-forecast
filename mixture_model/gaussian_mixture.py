@@ -4,14 +4,20 @@ from numpy.testing import assert_almost_equal
 from scipy.stats import norm
 
 # User modules
-from .base import (
-    MixtureModel,
-    _squared_error_calculation,
-    _maximum_likelihood_bias,
-    # _maximum_likelihood_std
-)
+from .base import MixtureModel
 
 NORM_CONSTANT = -0.5 * np.log(2 * np.pi)
+
+
+def _error_calculation(X, y):
+
+    # Numpy column-wise subtraction is expressed as row-wise subtraction.
+    E = (X.transpose() - y).transpose()
+    return E
+
+
+def _squared_error_calculation(X, y):
+    return np.square(_error_calculation(X, y))
 
 
 def _log_normal_pdf(squared_errors, variances):
@@ -77,19 +83,14 @@ class GaussianMixtureModel(MixtureModel):
         assert len(y.shape) == 1, "Provided y is not a vector."
         self._forecast_prepared = False
 
-        # TODO Fix bias correction to support groups
-        # Mean bias correction on first member
-        bias_per_model = _maximum_likelihood_bias(X, y)
-        self._optimizer.fit(X - bias_per_model, y)
+        # Call optimizer
+        self._optimizer.fit(X, y)
 
-        # Update variances and bias
-        for (member, model_std, model_bias) in \
+        # Update variances
+        for (member, model_std) in \
             zip(self._members,
-                self._optimizer.get_member_variances(),
-                bias_per_model):
+                self._optimizer.get_member_variances()):
             member.parameters['scale'] = model_std
-            member.bias = 0
-            # member.bias = model_bias
 
         # Update weights
         self.weights = self._optimizer.get_member_weights()
@@ -102,7 +103,7 @@ class GaussianMixtureModel(MixtureModel):
         """Clamp forecast model means to the GMM."""
         assert len(member_means) == self.member_count
         for (mean, member) in zip(member_means, self._members):
-            member.parameters['loc'] = mean - member.bias
+            member.parameters['loc'] = mean
         self._forecast_prepared = True
 
     def get_member_means(self):
@@ -129,7 +130,7 @@ class GaussianMixtureModel(MixtureModel):
         """Return the GMM mean forecast."""
         self._check_member_means()
         return sum([
-            (member.parameters['loc'] - member.bias) * weight
+            (member.parameters['loc']) * weight
             for (member, weight)
             in zip(self._members, self.weights)
         ])
@@ -166,12 +167,12 @@ class GaussianEM(object):
         # Parameters are defined per group, meaning they are the same for all
         # group members by definition.
         self._dim = 1  # Dimensionality of output
-        self.variance_prior_W = 4  # Matrix of dim x dim, 0 means no prior.
-        self.variance_prior_nu = 5  # Scalar value, 2 means no prior.
+        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
+        self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
         self.variances = np.ones(self.group_count)
         # Uniform prior on weights
         self.weight_prior = \
-            np.ones(self.group_count) * 1.1  # All ones means no prior
+            np.ones(self.group_count) * 1  # All ones means no prior
         self.weights = np.ones(self.group_count) / self.member_count
 
     def get_member_variances(self):

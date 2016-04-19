@@ -80,10 +80,12 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
 
 
 def plot_model_parameters(valid_dates, model_weights, model_variances,
+                          bias_intercepts,
                           forecast_hour, names):
     # Convert parameters to workable format
     model_weights = np.array(model_weights)
     model_variances = np.array(model_variances)
+    bias_intercepts = np.array(bias_intercepts)
     names = np.array(names)
     # Only show a single line for EPS members.
     first_member_found = False
@@ -97,24 +99,35 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
         # Mark column as valid
         valid_columns.append(count)
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(211)
+    fig = plt.figure(figsize=(10, 12))
+    ax1 = fig.add_subplot(311)
     ax1.plot(valid_dates, model_weights[:, valid_columns])
     plt.grid(True)
     plt.xlabel("Valid date")
     plt.ylabel("Model contribution")
     plt.title("Model weights for valid dates on forecast hour %d" %
               forecast_hour)
-    plt.legend(names[valid_columns])
+    # plt.legend(names[valid_columns])
 
-    ax2 = fig.add_subplot(212, sharex=ax1)
+    ax2 = fig.add_subplot(312, sharex=ax1)
     ax2.plot(valid_dates, model_variances[:, valid_columns])
     plt.grid(True)
     plt.xlabel("Valid date")
     plt.ylabel("Model variance")
     plt.title("Model variances for valid dates on forecast hour %d" %
               forecast_hour)
-    plt.legend(names[valid_columns])
+    # plt.legend(names[valid_columns])
+
+    ax3 = fig.add_subplot(313, sharex=ax1)
+    ax3.plot(valid_dates, bias_intercepts[:, valid_columns])
+    plt.grid(True)
+    plt.xlabel("Valid date")
+    plt.ylabel("Bias intercepts")
+    plt.title("Model bias intercepts for valid dates on forecast hour %d" %
+              forecast_hour)
+    plt.legend(names[valid_columns], loc=9, bbox_to_anchor=(0.5, -0.5),
+               ncol=len(valid_columns))
+
     fig.autofmt_xdate()
     plt.savefig("output/img/model_parameters_%dfh.png" % forecast_hour)
     # plt.show()
