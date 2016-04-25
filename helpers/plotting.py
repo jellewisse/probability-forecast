@@ -71,29 +71,32 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     plt.legend(numpoints=1)
     plt.xlabel("Valid date")
     plt.ylabel("Temperature (C°)")
+    plt.ylim([-20, 20])
     plt.title(
         "Wing temperature probability forecast for +%dh" % (forecast_hour))
     plt.grid(True)
-    plt.savefig("output/img/twing_percentile_%dfh.png" % forecast_hour)
-    # plt.show()
-    fig.clear()
+    plt.savefig("output/img/%s_percentile_%dfh.png" %
+                (element_name, forecast_hour))
+    plt.close(fig)
 
 
 def plot_model_parameters(valid_dates, model_weights, model_variances,
                           bias_intercepts,
-                          forecast_hour, names):
+                          forecast_hour, model_names, element_name):
+    """"Foo."""
     # Convert parameters to workable format
     model_weights = np.array(model_weights)
     model_variances = np.array(model_variances)
     bias_intercepts = np.array(bias_intercepts)
-    names = np.array(names)
+    model_names = np.array(model_names)
     # Only show a single line for EPS members.
     first_member_found = False
     valid_columns = []
-    for count, name in enumerate(names):
+    for count, name in enumerate(model_names):
         if 'EPS' in name and not first_member_found:
             first_member_found = True
-            names[count] = names[count][:-2]  # Cut off perturbation number
+            # Cut off perturbation number
+            model_names[count] = model_names[count][:-2]
         elif 'EPS' in name:
             continue
         # Mark column as valid
@@ -101,37 +104,55 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
 
     fig = plt.figure(figsize=(10, 12))
     ax1 = fig.add_subplot(311)
-    ax1.plot(valid_dates, model_weights[:, valid_columns])
+    ps1 = ax1.plot(valid_dates, model_weights[:, valid_columns])
+    mean_weights = model_weights.mean(axis=0)
+    for count, line in enumerate(ps1):
+        ax1.axhline(
+            y=mean_weights[count],
+            linewidth=0.5, zorder=0, linestyle='--', c=line.get_color())
     plt.grid(True)
     plt.xlabel("Valid date")
+    plt.ylim([0, 1])
     plt.ylabel("Model contribution")
     plt.title("Model weights for valid dates on forecast hour %d" %
               forecast_hour)
-    # plt.legend(names[valid_columns])
+    # plt.legend(model_names[valid_columns])
 
     ax2 = fig.add_subplot(312, sharex=ax1)
-    ax2.plot(valid_dates, model_variances[:, valid_columns])
+    ps2 = ax2.plot(valid_dates, model_variances[:, valid_columns])
+    mean_variances = model_variances.mean(axis=0)
+    for count, line in enumerate(ps2):
+        ax2.axhline(
+            y=mean_variances[count],
+            linewidth=0.5, zorder=0, linestyle='--', c=line.get_color())
     plt.grid(True)
     plt.xlabel("Valid date")
     plt.ylabel("Model variance")
+    plt.ylim([0, 10])
     plt.title("Model variances for valid dates on forecast hour %d" %
               forecast_hour)
-    # plt.legend(names[valid_columns])
+    # plt.legend(model_names[valid_columns])
 
     ax3 = fig.add_subplot(313, sharex=ax1)
-    ax3.plot(valid_dates, bias_intercepts[:, valid_columns])
+    ps3 = ax3.plot(valid_dates, bias_intercepts[:, valid_columns])
+    mean_bias = bias_intercepts.mean(axis=0)
+    for count, line in enumerate(ps3):
+        ax3.axhline(
+            y=mean_bias[count],
+            linewidth=0.5, zorder=0, linestyle='--', c=line.get_color())
     plt.grid(True)
     plt.xlabel("Valid date")
     plt.ylabel("Bias intercepts")
+    plt.ylim([-2.0, 1.0])
     plt.title("Model bias intercepts for valid dates on forecast hour %d" %
               forecast_hour)
-    plt.legend(names[valid_columns], loc=9, bbox_to_anchor=(0.5, -0.5),
+    plt.legend(model_names[valid_columns], loc=9, bbox_to_anchor=(0.5, -0.5),
                ncol=len(valid_columns))
 
     fig.autofmt_xdate()
-    plt.savefig("output/img/model_parameters_%dfh.png" % forecast_hour)
-    # plt.show()
-    fig.clear()
+    plt.savefig("output/img/%s_model_parameters_%dfh.png" %
+                (element_name, forecast_hour))
+    plt.close(fig)
 
 
 def get_bins(nr_bins, left_lim=0, right_lim=1):
