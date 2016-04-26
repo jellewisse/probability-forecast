@@ -29,6 +29,12 @@ def _calculate_lag(forecast_hour):
     return np.ceil(forecast_hour / 24)
 
 
+def _split_list(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:(i + n)]
+
+
 def _model_to_group(model_names, element_name):
     """Construct column names and standard member grouping."""
     grouping = []
@@ -69,11 +75,12 @@ def pipeline(element_name, model_names, issue, forecast_hours):
     model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
 
     # Loop over forecast hours
-    for fh_count, forecast_hour in enumerate(forecast_hours):
+    forecast_hour_groups = list(_split_list(forecast_hours, 3))
+    for fh_count, forecast_hour_group in enumerate(forecast_hour_groups):
         fh_time = time()
         print("Processing %d / %d forecast hours.." %
-              (fh_count + 1, len(forecast_hours)))
-        data = full_data[full_data.forecast_hour == forecast_hour]
+              (fh_count + 1, len(forecast_hour_groups)))
+        data = full_data[full_data.forecast_hour.isin(forecast_hour_group)]
 
         if len(data) == 0:
             print("No data for this forecast hour. Skipping.")
@@ -81,7 +88,8 @@ def pipeline(element_name, model_names, issue, forecast_hours):
 
         # TODO Write results to other dataframe than original data
         # The dates to predict for
-        lag = _calculate_lag(forecast_hour)
+        # TODO Take latest lag to be conservative.
+        lag = _calculate_lag(forecast_hour_group[-1])
         valid_dates = data['valid_date'].unique()
         assert len(valid_dates) == len(data), \
             "Each valid date should only have a single prediction"
@@ -182,17 +190,14 @@ def pipeline(element_name, model_names, issue, forecast_hours):
             #     full_data.loc[index, element_name + '_ENSEMBLE_MEAN'],
             #     valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
-        plot.plot_ensemble_percentiles(
-            forecast_hour, percentiles, element_name, full_data)
+        for forecast_hour in forecast_hour_group:
+            plot.plot_ensemble_percentiles(
+                forecast_hour, percentiles, element_name, full_data)
         plot.plot_model_parameters(
             plot_valid_dates, model_mix_weights, model_mix_variances,
             model_bias_intercepts,
-            forecast_hour, ens_cols)
+            forecast_hour_group, ens_cols, element_name)
     return full_data.drop(ens_cols, axis=1)
-
-
-def fooplot(data):
-    pass
 
 
 def do_verification(data, forecast_hour):
@@ -211,9 +216,9 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(0, 48 + 1, 1)
+    forecast_hours = np.arange(1, 48 + 1, 1)
     model_names = ["control", "fc", "ukmo"]
-    element_name = "TWING"
+    element_name = "TWING"  # Options: 2T, TWING
     data = pipeline(element_name, model_names, "0", forecast_hours)
 
     # Write predictions to file

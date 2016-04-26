@@ -82,7 +82,7 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
 
 def plot_model_parameters(valid_dates, model_weights, model_variances,
                           bias_intercepts,
-                          forecast_hour, model_names, element_name):
+                          forecast_hour_group, model_names, element_name):
     """"Foo."""
     # Convert parameters to workable format
     model_weights = np.array(model_weights)
@@ -114,8 +114,8 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     plt.xlabel("Valid date")
     plt.ylim([0, 1])
     plt.ylabel("Model contribution")
-    plt.title("Model weights for valid dates on forecast hour %d" %
-              forecast_hour)
+    plt.title("Model weights for valid dates on forecast hour %s" %
+              str(forecast_hour_group))
     # plt.legend(model_names[valid_columns])
 
     ax2 = fig.add_subplot(312, sharex=ax1)
@@ -129,8 +129,8 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     plt.xlabel("Valid date")
     plt.ylabel("Model variance")
     plt.ylim([0, 10])
-    plt.title("Model variances for valid dates on forecast hour %d" %
-              forecast_hour)
+    plt.title("Model variances for valid dates on forecast hour %s" %
+              str(forecast_hour_group))
     # plt.legend(model_names[valid_columns])
 
     ax3 = fig.add_subplot(313, sharex=ax1)
@@ -144,14 +144,19 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     plt.xlabel("Valid date")
     plt.ylabel("Bias intercepts")
     plt.ylim([-2.0, 1.0])
-    plt.title("Model bias intercepts for valid dates on forecast hour %d" %
-              forecast_hour)
+    plt.title("Model bias intercepts for valid dates on forecast hour %s" %
+              str(forecast_hour_group))
     plt.legend(model_names[valid_columns], loc=9, bbox_to_anchor=(0.5, -0.5),
                ncol=len(valid_columns))
 
     fig.autofmt_xdate()
-    plt.savefig("output/img/%s_model_parameters_%dfh.png" %
-                (element_name, forecast_hour))
+    if len(forecast_hour_group) == 1:
+        file_name = "output/img/%s_model_parameters_%dfh.png" % \
+                    (element_name, forecast_hour_group[0])
+    else:
+        file_name = "output/img/%s_model_parameters_%sfh.png" % \
+                    (element_name, str(forecast_hour_group))
+    plt.savefig(file_name)
     plt.close(fig)
 
 
