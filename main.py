@@ -52,13 +52,14 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
-def pipeline(element_name, model_names, issue, forecast_hours):
+def pipeline(element_name, model_names, station_names, issue, forecast_hours):
     """Main ETL method."""
     # Load data
     print("Loading data..")
     load_start_time = time()
     full_data = cached_load_data(
         element_name,
+        station_names,
         issue,
         model_names
     )
@@ -73,6 +74,8 @@ def pipeline(element_name, model_names, issue, forecast_hours):
 
     # Bias corrector definition
     model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
+
+    # TODO TdR 20-05-2016 Check what happens if multiple stations are loaded.
 
     # Loop over forecast hours
     forecast_hour_groups = list(_split_list(forecast_hours, 3))
@@ -161,7 +164,7 @@ def pipeline(element_name, model_names, issue, forecast_hours):
                 model_mix.mean()
             # Percentiles
             perc_start_time = time()
-            percentiles = np.array([1, 10, 25, 75, 90, 99])
+            percentiles = np.array([5, 10, 25, 75, 90, 95])
             perc_values = metrics.percentiles(
                 model_mix.cdf, percentiles / 100, y_test - 15)
             for percentile, value in zip(percentiles, perc_values):
@@ -216,10 +219,12 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(1, 48 + 1, 1)
+    forecast_hours = np.arange(13, 13 + 1, 1)
     model_names = ["control", "fc", "ukmo"]
+    station_names = ["debilt", "schiphol"]
     element_name = "TWING"  # Options: 2T, TWING
-    data = pipeline(element_name, model_names, "0", forecast_hours)
+    data = pipeline(
+        element_name, model_names, station_names, "0", forecast_hours)
 
     # Write predictions to file
     data.sort_values(['issue_date', 'forecast_hour'],

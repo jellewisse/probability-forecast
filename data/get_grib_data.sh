@@ -1,8 +1,12 @@
 #!/bin/bash
 # TODO Make coordinates argument
 # Model grid point definition at Schiphol
-gridLat=52.31555938720703
-gridLong=4.790283679962158
+# gridLat=52.31555938720703
+# gridLong=4.790283679962158
+
+# Model grid point definition at De Bilt
+gridLat=52.0988883972168
+gridLong=5.17971658706665
 
 # TODO Make argument
 gribdir="/data/research/verification/data_requests/requests_2015/bcs30429/data/"
@@ -63,7 +67,7 @@ if [ ! -d "$datadir" ]; then
 fi
 
 # Read parameters from file.
-readLines "headers_from_file" "${paramdir}data_headers.txt"
+readLines "headers_from_file" "${paramdir}data_headers_ec.txt"
 nr_columns=${#headers_from_file[@]}
 col_headers=$(IFS=$','; echo "${headers_from_file[*]}")
 echo "$nr_columns column headers read for processing."
@@ -72,7 +76,7 @@ readLines "dates" "${paramdir}dates.txt"
 nr_dates=${#dates[*]}
 echo "$nr_dates dates read for processing."
 
-readLines "variables" "${paramdir}variable_ids.txt"
+readLines "variables" "${paramdir}variable_ids_ec.txt"
 nr_variables=${#variables[*]}
 echo "$nr_variables variables read for processing."
 model_prefixes[0]="eps"

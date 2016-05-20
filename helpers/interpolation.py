@@ -1,4 +1,4 @@
-# interpolation.py
+"""Module containing functions for spatial interpolation."""
 from math import (
     radians as deg2rad,
     sin,
@@ -10,7 +10,7 @@ import numpy as np
 
 
 def distance(point1, point2):
-    """Computes the haversine distance between two (lat,lon) points.
+    r"""Compute the haversine distance between two (lat,lon) points.
 
     This method assumes the earth is a sphere with a constant radius.
     The error is 0.55\%, which is good enough for most uses.
@@ -37,11 +37,12 @@ def distance(point1, point2):
     return int(round(d))
 
 
-def argsort(myList):
+def _argsort(myList):
+    """Return the indices of the list if it were sorted ascendingly."""
     return [i[0] for i in sorted(enumerate(myList), key=lambda x:x[1])]
 
 
-def find_left_right(lons, index):
+def _find_left_right(lons, index):
     assert len(lons) == 2
     assert len(index) == len(lons)
 
@@ -52,11 +53,10 @@ def find_left_right(lons, index):
 
 
 def grid_point_order(lats, lons):
-    """Given four lat-lon pairs, determine the coordinate values."""
-
+    """Determine the coordinate values given four lat-lon pairs."""
     # Sort points based on latitude
-    lat_sort_index = argsort(lats)
-    # lon_sort_index = argsort(lons)
+    lat_sort_index = _argsort(lats)
+    # lon_sort_index = _argsort(lons)
 
     # Find top row - two values with highest latitudes
     top_points = lat_sort_index[-2:]
@@ -70,14 +70,13 @@ def grid_point_order(lats, lons):
     lons = np.array(lons)
     lats = np.array(lats)
     # Find top left / North-West
-    top_left, top_right = find_left_right(lons[top_points], top_points)
-    bot_left, bot_right = find_left_right(lons[bottom_points], bottom_points)
+    top_left, top_right = _find_left_right(lons[top_points], top_points)
+    bot_left, bot_right = _find_left_right(lons[bottom_points], bottom_points)
     return [top_left, top_right, bot_left, bot_right]
 
 
-# @cache
 def get_bilinear_weights(req_lat, req_lon, lats, lons):
-    """"""
+    """Compute bilinear interpolation weights."""
     # Request point should be within square
     assert any(req_lat <= np.array(lats)) and any(req_lat >= np.array(lats))
     assert any(req_lon <= np.array(lons)) and any(req_lon >= np.array(lons))
@@ -107,6 +106,7 @@ def get_bilinear_weights(req_lat, req_lon, lats, lons):
 
 def bilinear_interpolate(req_lat, req_lon,
                          forecasts, lats, lons, dists=None):
+    """Do bilinear interpolation."""
     assert len(lats) == 4, "Bad number of points provided."
     assert len(lats) == len(lons), "Unequal number of points and values."
     assert forecasts.shape[1] == 4
@@ -122,7 +122,7 @@ def bilinear_interpolate(req_lat, req_lon,
 
 
 def nearest_grid_point(distances):
-    """Returns the index of the nearest grid point."""
+    """Return the index of the nearest grid point."""
     return distances.index(min(distances))
 
 
@@ -130,7 +130,8 @@ def nearest_grid_point_interpolate(lat, lon, forecasts,
                                    lats=None, lons=None, dists=None):
     """Nearest grid point interpolation function.
 
-    forecasts should be a dataframe """
+    forecasts should be a dataframe.
+    """
     assert dists is not None, "Distances should be provided."
     values = np.around(forecasts.ix[:, nearest_grid_point(dists)].values, 3)
     values.astype(np.float32, copy=False)
@@ -140,8 +141,7 @@ def nearest_grid_point_interpolate(lat, lon, forecasts,
 def interpolate(lat, lon,
                 forecasts, lats, lons, dists,
                 forecast_fun=bilinear_interpolate):
-    """General interpolation function."""
-
+    """Do interpolation given a method."""
     assert len(forecasts.columns) == 4, "Bad number of grid points provided."
     assert len(lats) == len(lons), "Latitudes and longitudes don't match."
     assert len(dists) == 4, "Bad number of distances provided."

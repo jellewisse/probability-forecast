@@ -6,7 +6,6 @@ from math import isnan
 # User modules
 from helpers import data_io
 from helpers.interpolation import interpolate
-from helpers.constants import SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON
 # For now these are hard-coded since there only is one station
 
 
@@ -106,39 +105,47 @@ def transform_forecast_group_data(forecast_data, model_name, element_name):
 
 
 # TODO Test
-def load_and_interpolate_forecast(model, element_id, element_name, issue):
+def load_and_interpolate_forecast(model, element_name,
+                                  station_name, issue):
     """Load a given dataset of forecast data with interpolated values.
 
     parameters
     ----------
     model: str, name of model
-    element_id: int, id of parameter under the provided model
+    element_name: str, string representation of the provided parameter
+    station_name: str, canonical name of the station
     issue: str, string representation of the model issue hour
     """
     # Forecast columns: 1 to 4
     forecast_cols = ['value' + str(x) for x in range(1, 5)]
 
+    # Station location
+    station_lat, station_lon = data_io.get_station_location(station_name)
+
     # Read in forecast
-    forecast_data = data_io.read_forecast_data(model, element_id, issue)
+    element_id = data_io.get_element_id(element_name, model)
+    forecast_data = data_io.read_forecast_data(
+        model, element_id, station_name, issue)
 
     # Check whether to do any interpolation
     empty_columns = \
         forecast_data.ix[:, forecast_cols].isnull().values.any(axis=0)
     if empty_columns.sum() == 3:
         # Just a single column provided. Don't do interpolation.
-        print("Not interpolating for model '%s' and element '%s'" %
-              (model, str(element_id)))
+        print("Not interpolating for model '%s', element '%s', station '%s'" %
+              (model, str(element_id), station_name))
         # Select non-empty column
         non_empty_col = forecast_cols[(~empty_columns).nonzero()[0][0]]
         interpolated_forecast = forecast_data[non_empty_col]
     else:
         # Do interpolation using meta-data
-        lats, lons, dists = \
-            data_io.read_meta_data(model, element_id, issue)
-        # TODO Schiphol station location is hard coded right now
+        meta_data = \
+            data_io.read_meta_data(model, element_id, station_name, issue)
         interpolated_forecast = interpolate(
-            SCHIPHOL_STATION_LAT, SCHIPHOL_STATION_LON,
-            forecast_data.ix[:, forecast_cols], lats, lons, dists
+            station_lat, station_lon,
+            forecast_data.ix[:, forecast_cols],
+            meta_data['latitude'], meta_data['longitude'],
+            meta_data['distance']
         )
     forecast_data['interpolated_forecast'] = interpolated_forecast
 
@@ -151,34 +158,43 @@ def load_and_interpolate_forecast(model, element_id, element_name, issue):
     return forecast_data
 
 
-def add_observations(forecast_data, element_id):
+def add_observations(forecast_data, element_id, station_names):
     """Merge observations into provided forecast data."""
-    # TODO Hack. Fix me.
+    # TODO Right now, TWING observations are stored separately.
+    # Have the same treatment regardless of element.
     if element_id == 999:
-        observations = data_io.read_observations(element_id)
+        for station_name in station_names:
+            observations = data_io.read_observations(element_id, station_name)
+            forecast_data = pd.DataFrame.merge(
+                forecast_data, observations,
+                how='inner', copy=False
+            )
     else:
-        observations = data_io.read_knmi_observations()
-    return pd.DataFrame.merge(
-        forecast_data, observations,
-        copy=False
-    )
+        observations = data_io.read_knmi_observations(station_names)
+        forecast_data = pd.DataFrame.merge(
+            forecast_data, observations,
+            how='inner', copy=False
+        )
 
 
-def load_data(element_name, issue, model_names):
+def load_data(element_name, station_names, issue, model_names):
     """Wrapper function for loading and combining several models."""
     # Load data for specific models
     data = pd.DataFrame()
-    for model_name in model_names:
-        element_id = data_io.get_element_id(element_name, model_name)
-        model_data = load_and_interpolate_forecast(
-            model_name, element_id, element_name, issue)
-        if data.empty:
-            data = model_data
-        else:
-            data = pd.merge(data, model_data, copy=False, how='outer')
+    for station_name in station_names:
+        for model_name in model_names:
+            model_data = load_and_interpolate_forecast(
+                model_name, element_name, station_name, issue)
+            if data.empty:
+                data = model_data
+            else:
+                data = pd.merge(data, model_data, copy=False, how='outer')
+    import pdb
+    pdb.set_trace()
 
     # Add observations to data
     obs_element_id = data_io.get_element_id(element_name, "fc")
-    data = add_observations(data, obs_element_id)
+    add_observations(data, obs_element_id, station_names)
+
     data.sort_values('valid_date', ascending=True, inplace=True)
     return data

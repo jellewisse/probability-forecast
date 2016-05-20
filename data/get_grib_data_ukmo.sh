@@ -4,10 +4,14 @@
 gridLat=52.31555938720703
 gridLong=4.790283679962158
 
+# Model grid point definition at De Bilt
+gridLat=52.0988883972168
+gridLong=5.17971658706665
+
 # TODO Make argument
 gribdir="/data/archive/model/ukmo/"
 
-basedir="./"
+basedir="./schiphol/"
 paramdir=${basedir}data/
 datadir=${basedir}data/grib/
 
@@ -102,7 +106,8 @@ for((m=0; m<${nr_models}; m++)); do
         issue_time=${model_issues[k]}
 
         # Loop over elements
-        for((j=0; j<${nr_variables}; j++)); do
+        # for((j=0; j<${nr_variables}; j++)); do
+        for((j=5; j<8; j++)); do
             variable=${variables[j]}
 
             full_data=()
@@ -112,11 +117,11 @@ for((m=0; m<${nr_models}; m++)); do
                 # Loop over dates
                 for ((i=0; i<${nr_dates}; i++)); do
                     date=${dates[i]}
-                    
+
                     # Loop over forecast hours
                     for ((h=0; h<${nr_forecast_hours}; h++)); do
                         forecast_hour=${forecast_hours[h]}
-                        
+
                         # Loop core for ukmo
                         file_path=${gribdir}${model_prefix}_${date}${issue_time}_${forecast_hour}.grb
                         echo ${file_path}

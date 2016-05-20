@@ -4,7 +4,16 @@ import pandas as pd
 from datetime import timezone, datetime, timedelta
 
 # User modules
-from helpers.constants import FILE_PATH
+from helpers.constants import DATA_FILE_PATH
+
+
+# TODO Move this to file
+def get_station_location(station_name):
+    """Return the latitude and longitude of a given station."""
+    if station_name == 'schiphol':
+        return [52.31555938720703, 4.790283679962158]
+    elif station_name == 'debilt':
+        return [52.0988883972168, 5.17971658706665]
 
 
 def get_element_name(element_id):
@@ -86,7 +95,7 @@ def date_parser2(date):
 
 
 # TODO Test
-def read_knmi_observations():
+def read_knmi_observations(station_names):
     """Wrapper around the pandas read_csv method to load KNMI observations."""
     # Data type converters
     converters = {
@@ -95,7 +104,7 @@ def read_knmi_observations():
     }
 
     obs_data = pd.read_csv(
-        FILE_PATH + 'obs/obs_schiphol.csv',
+        DATA_FILE_PATH + 'obs/obs_nl.csv',
         na_values='',
         comment='#',
         usecols=['STN', 'YYYYMMDD', 'HH', 'T'],  # Only load these columns
@@ -114,17 +123,24 @@ def read_knmi_observations():
         inplace=True
     )
 
+    # Only keep data for the specified station names.
+    # TODO Support me
+    raise NotImplementedError("Support for multiple stations not yet added.")
+
     return obs_data
 
 
-def read_observations(element_id):
+def read_observations(element_id, station_name):
     """Load observation file for given element."""
     # TODO Element id depends on the model it comes from, sadly.
     # Add a mapping that also takes the model name into account.
+    # Right now, we assume the observations are the ECMWF representation.
+
+    file_path = DATA_FILE_PATH + 'data_' + station_name + '/'
 
     column_name = get_element_name(element_id)
     obs_data = pd.read_csv(
-        FILE_PATH + 'grib/data_obs_' + str(element_id) + '.csv',
+        file_path + 'data_obs_' + str(element_id) + '.csv',
         na_values='',
         usecols=['dtg', 'station_id', column_name],
         parse_dates={'valid_date': ['dtg']},
@@ -137,11 +153,17 @@ def read_observations(element_id):
         },
         inplace=True
     )
+    obs_data['station_name'] = station_name
+    # Drop irrelevant columns
+    obs_data.drop(
+        ['station_id'],
+        axis=1, inplace=True
+    )
     return obs_data
 
 
 # TODO Test
-def read_forecast_data(model, element_id, issue, file_path=None):
+def read_forecast_data(model, element_id, station_name, issue, file_path=None):
     """Read in a forecast file for a specific model, element_id and issue.
 
     parameters
@@ -150,7 +172,7 @@ def read_forecast_data(model, element_id, issue, file_path=None):
     element_id: int id of the model parameter. May depend on the model.
     """
     if file_path is None:
-        file_path = FILE_PATH + 'grib/'
+        file_path = DATA_FILE_PATH + 'data_' + station_name + '/'
 
     file_name = \
         file_path + \
@@ -184,6 +206,10 @@ def read_forecast_data(model, element_id, issue, file_path=None):
         axis=1
     )
 
+    # Add the station name to the file.
+    forecast_data['station_name'] = station_name
+
+    # Drop irrelevant columns
     forecast_data.drop(
         ['level', 'stepUnits', 'startStep'],
         axis=1, inplace=True
@@ -196,10 +222,10 @@ def _extract_from_string(needle, haystack):
     return haystack.find(needle) + len(needle)
 
 
-def read_meta_data(model, element_id, issue, file_path=None):
+def read_meta_data(model, element_id, station_name, issue, file_path=None):
     """Extract lat, lon and distances for given model specification."""
     if file_path is None:
-        file_path = FILE_PATH + 'grib/'
+        file_path = DATA_FILE_PATH + 'data_' + station_name + '/'
 
     file_path += \
         '_'.join(['meta', model, str(element_id), issue]) + \
@@ -223,7 +249,7 @@ def read_meta_data(model, element_id, issue, file_path=None):
         dist_index = _extract_from_string("distance=", line)
         distance[count] = float(line[dist_index:(dist_index + 5)])
 
-    return latitude, longitude, distance
+    return {'latitude': latitude, 'longitude': longitude, 'distance': distance}
 
 
 def write_csv(data_frame, file_path):
