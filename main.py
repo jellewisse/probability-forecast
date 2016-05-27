@@ -76,15 +76,17 @@ def pipeline(element_name, model_names, station_names, issue, forecast_hours):
     model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
 
     # TODO TdR 20-05-2016 Check what happens if multiple stations are loaded.
+    full_data.to_csv('foo.csv')
+
+    GROUP_SIZE = 1
 
     # Loop over forecast hours
-    forecast_hour_groups = list(_split_list(forecast_hours, 3))
+    forecast_hour_groups = list(_split_list(forecast_hours, GROUP_SIZE))
     for fh_count, forecast_hour_group in enumerate(forecast_hour_groups):
         fh_time = time()
         print("Processing %d / %d forecast hours.." %
               (fh_count + 1, len(forecast_hour_groups)))
         data = full_data[full_data.forecast_hour.isin(forecast_hour_group)]
-
         if len(data) == 0:
             print("No data for this forecast hour. Skipping.")
             continue
@@ -94,8 +96,8 @@ def pipeline(element_name, model_names, station_names, issue, forecast_hours):
         # TODO Take latest lag to be conservative.
         lag = _calculate_lag(forecast_hour_group[-1])
         valid_dates = data['valid_date'].unique()
-        assert len(valid_dates) == len(data), \
-            "Each valid date should only have a single prediction"
+        assert len(valid_dates) * len(station_names) == len(data), \
+            "Each station valid date should only have a single prediction"
 
         # Prediction intervals
         thresholds = np.arange(-30, 30, 0.5) + 273.15
@@ -182,16 +184,9 @@ def pipeline(element_name, model_names, station_names, issue, forecast_hours):
             full_data.loc[index, element_name + '_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
             row_count += 1
-            # if valid_date >= datetime(2015, 2, 14, tzinfo=timezone.utc):
-            #     import pdb
-            #     pdb.set_trace()
 
-            # plot.plot_distribution(model_mix, row[obs_col], valid_date)
             # TODO For debugging.
-            # plot.plot_distribution(
-            #     model_mix,
-            #     full_data.loc[index, element_name + '_ENSEMBLE_MEAN'],
-            #     valid_date)
+            # plot.plot_distribution(model_mix, row[obs_col], valid_date)
         print("Done (%.2fs)." % (time() - fh_time))
         for forecast_hour in forecast_hour_group:
             plot.plot_ensemble_percentiles(
@@ -219,9 +214,9 @@ def do_verification(data, forecast_hour):
 
 # For testing purposes
 if __name__ == "__main__":
-    forecast_hours = np.arange(13, 13 + 1, 1)
-    model_names = ["control", "fc", "ukmo"]
-    station_names = ["debilt", "schiphol"]
+    forecast_hours = np.arange(1, 48 + 1, 1)
+    model_names = ["eps", "control", "fc", "ukmo"]
+    station_names = ["schiphol", "debilt"]
     element_name = "TWING"  # Options: 2T, TWING
     data = pipeline(
         element_name, model_names, station_names, "0", forecast_hours)

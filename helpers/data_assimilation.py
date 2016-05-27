@@ -162,39 +162,72 @@ def add_observations(forecast_data, element_id, station_names):
     """Merge observations into provided forecast data."""
     # TODO Right now, TWING observations are stored separately.
     # Have the same treatment regardless of element.
+    merged_data = forecast_data
     if element_id == 999:
         for station_name in station_names:
+            print("Adding observations for element %d, station %s" %
+                  (element_id, station_name))
             observations = data_io.read_observations(element_id, station_name)
-            forecast_data = pd.DataFrame.merge(
-                forecast_data, observations,
-                how='inner', copy=False
+            merged_data = pd.DataFrame.merge(
+                merged_data, observations,
+                how='outer', copy=False
             )
     else:
         observations = data_io.read_knmi_observations(station_names)
-        forecast_data = pd.DataFrame.merge(
-            forecast_data, observations,
-            how='inner', copy=False
+        merged_data = pd.DataFrame.merge(
+            merged_data, observations,
+            on=['valid_date', 'station_name'],
+            how='outer', copy=False
         )
+    return merged_data
+
+
+def load_observations_for_station(station_name, element_name):
+    """Load observations for a specific stations."""
+    element_id = data_io.get_element_id(element_name, "fc")
+
+    # TODO Add support
+    if element_id != 999:
+        raise NotImplementedError()
+
+    observations = data_io.read_observations(element_id, station_name)
+    return observations
+
+
+def load_models_for_station(model_names, station_name, element_name, issue):
+    """Load model forecasts for a specific station."""
+    data = pd.DataFrame()
+    for model_name in model_names:
+        model_data = load_and_interpolate_forecast(
+            model_name, element_name, station_name, issue)
+        if data.empty:
+            data = model_data
+        else:
+            data = pd.merge(data, model_data, copy=False, how='outer')
+    return data
 
 
 def load_data(element_name, station_names, issue, model_names):
     """Wrapper function for loading and combining several models."""
-    # Load data for specific models
-    data = pd.DataFrame()
+    full_data = pd.DataFrame()
     for station_name in station_names:
-        for model_name in model_names:
-            model_data = load_and_interpolate_forecast(
-                model_name, element_name, station_name, issue)
-            if data.empty:
-                data = model_data
-            else:
-                data = pd.merge(data, model_data, copy=False, how='outer')
-    import pdb
-    pdb.set_trace()
+        # Load forecast data for the station
+        station_data = load_models_for_station(
+            model_names, station_name, element_name, issue)
 
-    # Add observations to data
-    obs_element_id = data_io.get_element_id(element_name, "fc")
-    add_observations(data, obs_element_id, station_names)
+        # Load observation data for the station
+        observation_data = load_observations_for_station(
+            station_name, element_name)
+        # Merge forecasts and observations for the station
+        station_data = pd.merge(
+            station_data, observation_data, copy=False, how='outer')
 
-    data.sort_values('valid_date', ascending=True, inplace=True)
-    return data
+        # Append data for the new station to other station data
+        if full_data.empty:
+            full_data = station_data
+        else:
+            full_data = pd.concat([full_data, station_data])
+
+    # Post-processing and cleanup
+    full_data.sort_values('valid_date', ascending=True, inplace=True)
+    return full_data
