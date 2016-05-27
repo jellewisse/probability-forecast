@@ -1,9 +1,11 @@
 """Main module."""
-
+import sys
 import pyfscache
 import numpy as np
 import pandas as pd
+import configparser
 from time import time
+
 
 # User modules
 from mixture_model.gaussian_mixture import GaussianMixtureModel
@@ -52,7 +54,7 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
-def pipeline(element_name, model_names, station_names, issue, forecast_hours):
+def main(element_name, model_names, station_names, issue, forecast_hours):
     """Main ETL method."""
     # Load data
     print("Loading data..")
@@ -212,18 +214,54 @@ def do_verification(data, forecast_hour):
     print("Ensemble mean MAE: %f" % (deterministic_MAE))
 
 
-# For testing purposes
-if __name__ == "__main__":
-    forecast_hours = np.arange(1, 48 + 1, 1)
-    model_names = ["eps", "control", "fc", "ukmo"]
-    station_names = ["schiphol", "debilt"]
-    element_name = "TWING"  # Options: 2T, TWING
-    data = pipeline(
-        element_name, model_names, station_names, "0", forecast_hours)
+def load_configuration(configuration_name='main'):
+    """Load the program configurations from file."""
+    config_parser = configparser.ConfigParser()
+    config_parser.read('config.ini')
+    return config_parser[configuration_name]
 
+
+def write_predictions(data_frame, element_name, model_names, forecast_hours):
+    """Write a data_frame to file."""
     # Write predictions to file
-    data.sort_values(['issue_date', 'forecast_hour'],
-                     ascending=True, inplace=True)
+    data_frame.sort_values(['issue_date', 'forecast_hour'],
+                           ascending=True, inplace=True)
     file_path = 'output/' + element_name + '_' + '_'.join(model_names) + '_' \
         + str(forecast_hours[0]) + '_' + str(forecast_hours[-1]) + '.csv'
-    data_io.write_csv(data, file_path)
+    data_io.write_csv(data_frame, file_path)
+
+
+if __name__ == "__main__":
+    """Run the probability forecast.
+
+    Example:
+        python main.py [configuration_name]
+    """
+
+    if len(sys.argv) >= 2:
+        config_section_name = sys.argv[1]
+    else:
+        config_section_name = 'main'
+
+    config = load_configuration(config_section_name)
+
+    # Forecast hour configuration
+    fh_first = int(config['first_forecast_hour'])
+    fh_last = int(config['last_forecast_hour'])
+    fh_interval = int(config['forecast_hour_interval'])
+    forecast_hours = np.arange(fh_first, fh_last + 1, fh_interval)
+
+    # Ensemble definition
+    model_issue = config['model_issue']
+    model_names = config['model_names'].split(',')
+    element_name = config['element_name']
+
+    # Station Selection
+    station_names = config['station_names'].split(',')
+
+    # Run the program
+    data = main(
+        element_name, model_names, station_names, model_issue, forecast_hours)
+
+    # Write predicitons to file
+    write_predictions(data, element_name, model_names, forecast_hours)

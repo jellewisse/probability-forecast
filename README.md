@@ -13,6 +13,9 @@ Additionally, one of the dependencies is not yet included in the PyPI for Python
 pip install git+https://github.com/vanife/pyfscache
 ```
 
+## Running the program.
+The program and ensemble can be configured by modifying `config.ini`.
+
 ## Verification
 - Rank histograms
 - Skill scores
