@@ -1,5 +1,6 @@
 """Main module."""
 import sys
+import logging
 import pyfscache
 import numpy as np
 import pandas as pd
@@ -54,10 +55,10 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
-def main(element_name, model_names, station_names, issue, forecast_hours):
+def main(element_name, model_names, station_names, issue, forecast_hours,
+         forecast_hour_group_size):
     """Main ETL method."""
-    # Load data
-    print("Loading data..")
+    logging.info("Loading data..")
     load_start_time = time()
     full_data = cached_load_data(
         element_name,
@@ -65,8 +66,8 @@ def main(element_name, model_names, station_names, issue, forecast_hours):
         issue,
         model_names
     )
-    print("Done loading data (%ds)." % (time() - load_start_time))
-    print("Data.shape: %d rows, %d columns." % full_data.shape)
+    logging.info("Done loading data (%ds)." % (time() - load_start_time))
+    logging.debug("data.shape: %d rows, %d columns." % full_data.shape)
 
     # Ensemble definition
     grouping, ens_cols = _model_to_group(model_names, element_name)
@@ -78,24 +79,22 @@ def main(element_name, model_names, station_names, issue, forecast_hours):
     model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
 
     # TODO TdR 20-05-2016 Check what happens if multiple stations are loaded.
-    full_data.to_csv('foo.csv')
-
-    GROUP_SIZE = 1
 
     # Loop over forecast hours
-    forecast_hour_groups = list(_split_list(forecast_hours, GROUP_SIZE))
+    forecast_hour_groups = \
+        list(_split_list(forecast_hours, forecast_hour_group_size))
     for fh_count, forecast_hour_group in enumerate(forecast_hour_groups):
         fh_time = time()
-        print("Processing %d / %d forecast hours.." %
-              (fh_count + 1, len(forecast_hour_groups)))
+        logging.info("Processing %d / %d forecast hours.." %
+                     (fh_count + 1, len(forecast_hour_groups)))
         data = full_data[full_data.forecast_hour.isin(forecast_hour_group)]
         if len(data) == 0:
-            print("No data for this forecast hour. Skipping.")
+            logging.warn("No data for forecast hour(s) %s. Skipping." %
+                         (str(forecast_hour_group)))
             continue
 
-        # TODO Write results to other dataframe than original data
         # The dates to predict for
-        # TODO Take latest lag to be conservative.
+        # Take latest lag to be conservative.
         lag = _calculate_lag(forecast_hour_group[-1])
         valid_dates = data['valid_date'].unique()
         assert len(valid_dates) * len(station_names) == len(data), \
@@ -125,10 +124,10 @@ def main(element_name, model_names, station_names, issue, forecast_hours):
                 (data.valid_date <= last_date) & (data.valid_date > first_date)
             ].dropna(axis=0, subset=ens_cols + [obs_col])
             if len(train_data) < (train_days * 0.5):
-                # print(
-                #   "Not enough training days (%s / %d), skipping date %s." % (
-                #         str(len(train_data)).zfill(2), train_days,
-                #         str(valid_date)))
+                logging.debug(
+                  "Not enough training days (%s / %d), skipping date %s." % (
+                        str(len(train_data)).zfill(2), train_days,
+                        str(valid_date)))
                 continue
             X_train = train_data[ens_cols].as_matrix()
             y_train = train_data[obs_col].as_matrix()
@@ -174,8 +173,8 @@ def main(element_name, model_names, station_names, issue, forecast_hours):
             for percentile, value in zip(percentiles, perc_values):
                 name = element_name + '_ENSEMBLE_PERC' + str(percentile)
                 full_data.loc[index, name] = value
-            print("Done with %s: %.3fs" %
-                  (str(valid_date), time() - perc_start_time))
+            logging.debug("Done with %s: %.3fs" %
+                          (str(valid_date), time() - perc_start_time))
 
             # For determining the ensemble verification rank / calibrationl
             # Rank only makes sense if the ensemble weights are uniformly
@@ -189,7 +188,8 @@ def main(element_name, model_names, station_names, issue, forecast_hours):
 
             # TODO For debugging.
             # plot.plot_distribution(model_mix, row[obs_col], valid_date)
-        print("Done (%.2fs)." % (time() - fh_time))
+        logging.info("Done with forecast hours %s (%.2fs)." %
+                     (str(forecast_hour_group), time() - fh_time))
         for forecast_hour in forecast_hour_group:
             plot.plot_ensemble_percentiles(
                 forecast_hour, percentiles, element_name, full_data)
@@ -208,10 +208,10 @@ def do_verification(data, forecast_hour):
     # a, b, c = plot.calculate_threshold_hits(hourly_data)
     # plot.plot_relialibilty_sharpness_diagram(a, b, c)
     mean_crps = hourly_data['2T_CRPS'].mean()
-    print("Mean CRPS: %f" % (mean_crps))
+    logging.info("Mean CRPS: %f" % (mean_crps))
     deterministic_MAE = \
         abs(hourly_data['2T_ENSEMBLE_MEAN'] - hourly_data['2T_OBS']).mean()
-    print("Ensemble mean MAE: %f" % (deterministic_MAE))
+    logging.info("Ensemble mean MAE: %f" % (deterministic_MAE))
 
 
 def load_configuration(configuration_name='main'):
@@ -219,6 +219,14 @@ def load_configuration(configuration_name='main'):
     config_parser = configparser.ConfigParser()
     config_parser.read('config.ini')
     return config_parser[configuration_name]
+
+
+def log_dict(dict):
+    """Write dict keys and values to log."""
+    logging.info("Configuration parameters:")
+    for key in dict:
+        logging.info("\t%s: %s" % (key, dict[key]))
+    logging.info("End of configuration parameters.")
 
 
 def write_predictions(data_frame, element_name, model_names, forecast_hours):
@@ -238,17 +246,27 @@ if __name__ == "__main__":
         python main.py [configuration_name]
     """
 
+    # Logger setup
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        level='INFO'
+    )
+    logging.info("Starting program.")
+
     if len(sys.argv) >= 2:
         config_section_name = sys.argv[1]
     else:
         config_section_name = 'main'
 
     config = load_configuration(config_section_name)
+    logging.info("Configuration loaded.")
+    log_dict(config)
 
     # Forecast hour configuration
     fh_first = int(config['first_forecast_hour'])
     fh_last = int(config['last_forecast_hour'])
     fh_interval = int(config['forecast_hour_interval'])
+    fh_group_size = int(config['forecast_hour_group_size'])
     forecast_hours = np.arange(fh_first, fh_last + 1, fh_interval)
 
     # Ensemble definition
@@ -261,7 +279,8 @@ if __name__ == "__main__":
 
     # Run the program
     data = main(
-        element_name, model_names, station_names, model_issue, forecast_hours)
+        element_name, model_names, station_names,
+        model_issue, forecast_hours, fh_group_size)
 
     # Write predicitons to file
     write_predictions(data, element_name, model_names, forecast_hours)
