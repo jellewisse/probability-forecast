@@ -98,8 +98,8 @@ def main(element_name, model_names, station_names, train_days, issue,
         issue,
         model_names
     )
-    logging.info("Done loading data (%ds)." % (time() - load_start_time))
-    logging.debug("data.shape: %d rows, %d columns." % full_data.shape)
+    logging.info("Done loading data (%ds).", time() - load_start_time)
+    logging.debug("data.shape: %d rows, %d columns.", full_data.shape)
 
     # Drop unrequested forecast hours
     data_assimilation.filter_unused_forecast_hours(full_data, forecast_hours)
@@ -121,11 +121,11 @@ def main(element_name, model_names, station_names, train_days, issue,
     )
     for group_id, data in forecast_hour_grouping:
         fh_time = time()
-        logging.info("Processing %d / %d forecast hour groups.." %
-                     (group_id, len(forecast_hour_grouping)))
+        logging.info("Processing %d / %d forecast hour groups..",
+                     group_id, len(forecast_hour_grouping))
         if len(data) == 0:
-            logging.warn("No data for forecast hour group %d. Skipping." %
-                         (group_id))
+            logging.warn("No data for forecast hour group %d. Skipping.",
+                         group_id)
             continue
 
         hours_in_group = data.forecast_hour.unique()
@@ -143,7 +143,7 @@ def main(element_name, model_names, station_names, train_days, issue,
 
         # Moving window prediction
         for index, row in data.iterrows():
-            logging.debug("Starting with row %s" % (str(row['valid_date'])))
+            logging.debug("Starting with row %s", str(row['valid_date']))
             # If one of the model prediction forecasts is unavailable, skip.
             if row[ensemble_columns + [observation_column]].isnull().any():
                 continue
@@ -158,9 +158,9 @@ def main(element_name, model_names, station_names, train_days, issue,
 
             if len(train_data) < (train_days * 0.5):
                 logging.warn(
-                  "Not enough training days (%s / %d), skipping date %s" % (
-                        str(len(train_data)).zfill(2), train_days,
-                        str(valid_date)))
+                    "Not enough training days (%s / %d), skipping date %s",
+                    str(len(train_data)).zfill(2), train_days,
+                    str(valid_date))
                 continue
 
             X_train = train_data[ensemble_columns].as_matrix()
@@ -190,8 +190,8 @@ def main(element_name, model_names, station_names, train_days, issue,
             PERCENTILES = np.array([5, 10, 25, 75, 90, 95])
             add_model_predictions(
                 full_data, model_mix, y_test, index, element_name, PERCENTILES)
-        logging.info("Done with forecast hour group %d (%.2fs)." %
-                     (group_id, time() - fh_time))
+        logging.info("Done with forecast hour group %d (%.2fs).",
+                     group_id, time() - fh_time)
         for forecast_hour in hours_in_group:
             plot.plot_ensemble_percentiles(
                 forecast_hour, PERCENTILES, element_name, full_data)
@@ -210,10 +210,10 @@ def do_verification(data, forecast_hour):
     # a, b, c = plot.calculate_threshold_hits(hourly_data)
     # plot.plot_relialibilty_sharpness_diagram(a, b, c)
     mean_crps = hourly_data['2T_CRPS'].mean()
-    logging.info("Mean CRPS: %f" % (mean_crps))
+    logging.info("Mean CRPS: %f", mean_crps)
     deterministic_MAE = \
         abs(hourly_data['2T_ENSEMBLE_MEAN'] - hourly_data['2T_OBS']).mean()
-    logging.info("Ensemble mean MAE: %f" % (deterministic_MAE))
+    logging.info("Ensemble mean MAE: %f", deterministic_MAE)
 
 
 def load_configuration(configuration_name='main'):
@@ -223,11 +223,11 @@ def load_configuration(configuration_name='main'):
     return config_parser[configuration_name]
 
 
-def log_dict(dict):
+def log_dict(dictionary):
     """Write dict keys and values to log."""
     logging.info("Configuration parameters:")
-    for key in dict:
-        logging.info("\t%s: %s" % (key, dict[key]))
+    for key in dictionary:
+        logging.info("\t%s: %s", key, dictionary[key])
     logging.info("End of configuration parameters.")
 
 
@@ -287,3 +287,4 @@ if __name__ == "__main__":
 
     # Write predicitons to file
     write_predictions(data, element_name, model_names, forecast_hours)
+    logging.info("Finished program.")
