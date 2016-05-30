@@ -1,3 +1,5 @@
+"""Module with simple linear corrections."""
+
 import numpy as np
 
 # User modules
@@ -26,8 +28,10 @@ def _maximum_likelihood_std(X, y):
 
 
 class SimpleBiasCorrector(BiasCorrector):
+    """Additive correction of bias."""
 
     def __init__(self, member_count, grouping=None):
+        """Constructor based on either member count or a grouping list."""
         # TODO Support grouping
         super().__init__(member_count)
 
@@ -36,8 +40,10 @@ class SimpleBiasCorrector(BiasCorrector):
         self.deviation_per_model = np.zeros(member_count)
 
     def fit(self, X, y):
+        """Calculate the mean offset."""
         super()._validate_data(X)
         self.intercept_per_model = _maximum_likelihood_bias(X, y)
 
     def predict(self, X):
+        """Subtract the mean offset."""
         return X - self.intercept_per_model

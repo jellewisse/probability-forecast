@@ -9,13 +9,12 @@ from time import time
 
 
 # User modules
-from mixture_model.gaussian_mixture import GaussianMixtureModel
-from bias_corrector.simple_correctors import SimpleBiasCorrector
-from helpers.data_assimilation import load_data
-import helpers.plotting as plot
+import mixture_model
+import bias_corrector
 from helpers import data_io
 from helpers import metrics
-
+import helpers.plotting as plot
+from helpers import data_assimilation
 
 # Configure cache
 CACHE_DIR = '.cache'
@@ -25,17 +24,32 @@ cache = pyfscache.FSCache(CACHE_DIR)
 @cache
 def cached_load_data(*args):
     """Wrapper for method level caching."""
-    return load_data(*args)
+    return data_assimilation.load_data(*args)
 
 
-def _calculate_lag(forecast_hour):
-    return np.ceil(forecast_hour / 24)
+def _get_group_index(number, group_size):
+    """Give group index for given number when grouping consecutive numbers.
+
+    Examples:
+        _get_group_index(5, 2) = 3
+        _get_group_index(2, 3) = 1
+    """
+    return np.ceil(number / group_size)
 
 
 def _split_list(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
         yield l[i:(i + n)]
+
+
+def find_sublist(element, list_of_lists):
+    """Return the index of the sublist containing element."""
+    for count, sublist in enumerate(list_of_lists):
+        if element in sublist:
+            return count
+        else:
+            return -1
 
 
 def _model_to_group(model_names, element_name):
@@ -55,8 +69,8 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
-def main(element_name, model_names, station_names, issue, forecast_hours,
-         forecast_hour_group_size):
+def main(element_name, model_names, station_names, train_days, issue,
+         forecast_hours, forecast_hour_group_size):
     """Main ETL method."""
     logging.info("Loading data..")
     load_start_time = time()
@@ -69,39 +83,47 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
     logging.info("Done loading data (%ds)." % (time() - load_start_time))
     logging.debug("data.shape: %d rows, %d columns." % full_data.shape)
 
+    # Drop unrequested forecast hours
+    data_assimilation.filter_unused_forecast_hours(full_data, forecast_hours)
+
     # Ensemble definition
-    grouping, ens_cols = _model_to_group(model_names, element_name)
+    ensemble_grouping, ensemble_columns = \
+        _model_to_group(model_names, element_name)
     obs_col = element_name + '_OBS'
-    model_mix = GaussianMixtureModel(len(ens_cols), grouping)
-    train_days = 40
+    model_mix = mixture_model.GaussianMixtureModel(
+        len(ensemble_columns), ensemble_grouping)
 
     # Bias corrector definition
-    model_bias = SimpleBiasCorrector(len(ens_cols), grouping)
+    model_bias = bias_corrector.SimpleBiasCorrector(
+        len(ensemble_columns), ensemble_grouping)
 
-    # TODO TdR 20-05-2016 Check what happens if multiple stations are loaded.
-
-    # Loop over forecast hours
-    forecast_hour_groups = \
-        list(_split_list(forecast_hours, forecast_hour_group_size))
-    for fh_count, forecast_hour_group in enumerate(forecast_hour_groups):
+    # Loop over forecast hour groups
+    forecast_hour_grouping = full_data.groupby(
+        _get_group_index(full_data.forecast_hour, forecast_hour_group_size)
+    )
+    for group_id, data in forecast_hour_grouping:
         fh_time = time()
-        logging.info("Processing %d / %d forecast hours.." %
-                     (fh_count + 1, len(forecast_hour_groups)))
-        data = full_data[full_data.forecast_hour.isin(forecast_hour_group)]
+        logging.info("Processing %d / %d forecast hour groups.." %
+                     (group_id, len(forecast_hour_grouping)))
         if len(data) == 0:
-            logging.warn("No data for forecast hour(s) %s. Skipping." %
-                         (str(forecast_hour_group)))
+            logging.warn("No data for forecast hour group %d. Skipping." %
+                         (group_id))
             continue
 
-        # The dates to predict for
+        hours_in_group = data.forecast_hour.unique()
+
+        # TODO TdR 30.05.2016 : Move lag calculation inside of data assimilate.
         # Take latest lag to be conservative.
-        lag = _calculate_lag(forecast_hour_group[-1])
-        valid_dates = data['valid_date'].unique()
-        assert len(valid_dates) * len(station_names) == len(data), \
+        lag = data_assimilation.calculate_training_lag(hours_in_group[-1])
+
+        # The dates to predict for.
+        prediction_dates = data['valid_date'].unique()
+        assert len(prediction_dates) * len(station_names) == len(data), \
             "Each station valid date should only have a single prediction"
 
         # Prediction intervals
         thresholds = np.arange(-30, 30, 0.5) + 273.15
+        # Variables for plotting
         model_mix_weights = []
         model_mix_variances = []
         model_bias_intercepts = []
@@ -111,8 +133,9 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
         row_count = 0
         for index, row in data.iterrows():
 
+            logging.debug("Starting with row %s" % (str(row['valid_date'])))
             # If one of the model prediction forecasts is unavailable, skip.
-            if row[ens_cols + [obs_col]].isnull().any():
+            if row[ensemble_columns + [obs_col]].isnull().any():
                 continue
 
             # Select data
@@ -122,23 +145,25 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
             # TODO Selection might be expensive. Alternative is to index first.
             train_data = data[
                 (data.valid_date <= last_date) & (data.valid_date > first_date)
-            ].dropna(axis=0, subset=ens_cols + [obs_col])
+            ].dropna(axis=0, subset=ensemble_columns + [obs_col])
             if len(train_data) < (train_days * 0.5):
                 logging.debug(
                   "Not enough training days (%s / %d), skipping date %s." % (
                         str(len(train_data)).zfill(2), train_days,
                         str(valid_date)))
                 continue
-            X_train = train_data[ens_cols].as_matrix()
+            X_train = train_data[ensemble_columns].as_matrix()
             y_train = train_data[obs_col].as_matrix()
-            X_test = row[ens_cols].as_matrix()
+            X_test = row[ensemble_columns].as_matrix()
             y_test = row[obs_col]
 
             # Train bias model
+            logging.debug("Training bias model..")
             model_bias.fit(X_train, y_train)
             X_train = model_bias.predict(X_train)
 
             # Train mixture model
+            logging.debug("Training mixture model..")
             model_mix.fit(X_train, y_train)
             model_mix_weights.append(model_mix.weights)
             model_mix_variances.append(model_mix.get_member_variances())
@@ -146,6 +171,7 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
             plot_valid_dates.append(valid_date)
 
             # Predict
+            logging.debug("Storing predictions..")
             X_test = model_bias.predict(X_test)
             model_mix.set_member_means(X_test)
 
@@ -173,8 +199,6 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
             for percentile, value in zip(percentiles, perc_values):
                 name = element_name + '_ENSEMBLE_PERC' + str(percentile)
                 full_data.loc[index, name] = value
-            logging.debug("Done with %s: %.3fs" %
-                          (str(valid_date), time() - perc_start_time))
 
             # For determining the ensemble verification rank / calibrationl
             # Rank only makes sense if the ensemble weights are uniformly
@@ -185,19 +209,20 @@ def main(element_name, model_names, station_names, issue, forecast_hours,
             full_data.loc[index, element_name + '_OBS_RANK'] = \
                 obs_in_forecasts.index(y_test)
             row_count += 1
-
             # TODO For debugging.
             # plot.plot_distribution(model_mix, row[obs_col], valid_date)
-        logging.info("Done with forecast hours %s (%.2fs)." %
-                     (str(forecast_hour_group), time() - fh_time))
-        for forecast_hour in forecast_hour_group:
+            logging.debug("Done with %s: %.3fs" %
+                          (str(valid_date), time() - perc_start_time))
+        logging.info("Done with forecast hour group %d (%.2fs)." %
+                     (group_id, time() - fh_time))
+        for forecast_hour in hours_in_group:
             plot.plot_ensemble_percentiles(
                 forecast_hour, percentiles, element_name, full_data)
         plot.plot_model_parameters(
             plot_valid_dates, model_mix_weights, model_mix_variances,
             model_bias_intercepts,
-            forecast_hour_group, ens_cols, element_name)
-    return full_data.drop(ens_cols, axis=1)
+            hours_in_group, ensemble_columns, element_name)
+    return full_data.drop(ensemble_columns, axis=1)
 
 
 def do_verification(data, forecast_hour):
@@ -249,7 +274,7 @@ if __name__ == "__main__":
     # Logger setup
     logging.basicConfig(
         format='%(asctime)s - %(levelname)s - %(message)s',
-        level='INFO'
+        level='DEBUG'
     )
     logging.info("Starting program.")
 
@@ -270,6 +295,7 @@ if __name__ == "__main__":
     forecast_hours = np.arange(fh_first, fh_last + 1, fh_interval)
 
     # Ensemble definition
+    train_days = int(config['model_train_days'])
     model_issue = config['model_issue']
     model_names = config['model_names'].split(',')
     element_name = config['element_name']
@@ -279,7 +305,7 @@ if __name__ == "__main__":
 
     # Run the program
     data = main(
-        element_name, model_names, station_names,
+        element_name, model_names, station_names, train_days,
         model_issue, forecast_hours, fh_group_size)
 
     # Write predicitons to file

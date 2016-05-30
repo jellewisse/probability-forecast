@@ -1,5 +1,7 @@
 """Wrapper module for combining data cleaning and loading."""
 
+import logging
+import numpy as np
 import pandas as pd
 from math import isnan
 
@@ -7,6 +9,28 @@ from math import isnan
 from helpers import data_io
 from helpers.interpolation import interpolate
 # For now these are hard-coded since there only is one station
+
+
+def calculate_training_lag(forecast_hour):
+    """Calculate delay in days to exclude from a dataset.
+
+    Example: when verifying a +48h forecast the earliest date we can verify
+    is the forecast issued two days ago, meaning we should exclude the latest
+    two days when training such a forecast.
+    """
+    return np.ceil(forecast_hour / 24)
+
+
+def filter_unused_forecast_hours(dataframe, forecast_hours):
+    """Drop unused rows inplace."""
+    hour_out_of_bounds = ~dataframe.forecast_hour.isin(forecast_hours)
+    out_of_bounds_index = hour_out_of_bounds[hour_out_of_bounds].index
+    dataframe.drop(out_of_bounds_index, inplace=True)
+
+
+def yield_training_iterator(data_frame, ):
+    """To define."""
+    pass
 
 
 def _get_element_key(model_name, perturbation_id,
@@ -132,7 +156,8 @@ def load_and_interpolate_forecast(model, element_name,
         forecast_data.ix[:, forecast_cols].isnull().values.any(axis=0)
     if empty_columns.sum() == 3:
         # Just a single column provided. Don't do interpolation.
-        print("Not interpolating for model '%s', element '%s', station '%s'" %
+        logging.debug(
+              "Not interpolating for model '%s', element '%s', station '%s'" %
               (model, str(element_id), station_name))
         # Select non-empty column
         non_empty_col = forecast_cols[(~empty_columns).nonzero()[0][0]]
@@ -165,7 +190,8 @@ def add_observations(forecast_data, element_id, station_names):
     merged_data = forecast_data
     if element_id == 999:
         for station_name in station_names:
-            print("Adding observations for element %d, station %s" %
+            logging.debug(
+                  "Adding observations for element %d, station %s" %
                   (element_id, station_name))
             observations = data_io.read_observations(element_id, station_name)
             merged_data = pd.DataFrame.merge(
@@ -226,7 +252,7 @@ def load_data(element_name, station_names, issue, model_names):
         if full_data.empty:
             full_data = station_data
         else:
-            full_data = pd.concat([full_data, station_data])
+            full_data = pd.concat([full_data, station_data], ignore_index=True)
 
     # Post-processing and cleanup
     full_data.sort_values('valid_date', ascending=True, inplace=True)
