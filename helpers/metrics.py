@@ -69,6 +69,13 @@ def _nearly_equal(a, b, tol):
     return abs(a - b) < tol
 
 
+def rank(new_value, member_values):
+    """The rank is the position of a value in a bigger sorted list."""
+    joined_list = list(member_values) + list([new_value])
+    joined_list.sort()
+    return joined_list.index(new_value)
+
+
 # Test
 def percentiles(cdf_fun, percentiles, init_value=None):
     """Return scores corresponding to given percentiles."""

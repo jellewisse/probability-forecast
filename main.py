@@ -3,7 +3,6 @@ import sys
 import logging
 import pyfscache
 import numpy as np
-import pandas as pd
 import configparser
 from time import time
 
@@ -37,21 +36,6 @@ def _get_group_index(number, group_size):
     return np.ceil(number / group_size)
 
 
-def _split_list(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in range(0, len(l), n):
-        yield l[i:(i + n)]
-
-
-def find_sublist(element, list_of_lists):
-    """Return the index of the sublist containing element."""
-    for count, sublist in enumerate(list_of_lists):
-        if element in sublist:
-            return count
-        else:
-            return -1
-
-
 def _model_to_group(model_names, element_name):
     """Construct column names and standard member grouping."""
     grouping = []
@@ -67,6 +51,40 @@ def _model_to_group(model_names, element_name):
             ens_cols += [element_name + '_' + model_name.upper()]
         group_counter += 1
     return grouping, ens_cols
+
+
+def add_model_predictions(dataframe, model, test_observation, row_index,
+                          element_name, percentiles):
+    """Add model predictions to the dataframe."""
+    # Local constants
+    ZERO_DEGREES_KELVIN = 273.15
+    THRESHOLDS = np.arange(-30, 30, 0.5) + 273.15
+    # Ensemble PDF
+    dataframe.loc[row_index, element_name + '_ENSEMBLE_PDF'] = \
+        model.pdf(test_observation)
+    # Ensemble CDF
+    dataframe.loc[row_index, element_name + '_ENSEMBLE_CDF'] = \
+        model.cdf(test_observation)
+    # Ensemble CDF freezing
+    dataframe.loc[row_index, element_name + '_ENSEMBLE_CDF_FREEZE'] = \
+        model.cdf(ZERO_DEGREES_KELVIN)
+    # CRPS
+    threshold_cdfs = model.cdf(THRESHOLDS)
+    dataframe.loc[row_index, element_name + '_CRPS'] = \
+        metrics.crps(THRESHOLDS, threshold_cdfs, test_observation)
+    # Ensemble mean
+    dataframe.loc[row_index, element_name + '_ENSEMBLE_MEAN'] = \
+        model.mean()
+    # Observation rank
+    dataframe.loc[row_index, element_name + '_OBS_RANK'] = \
+        metrics.rank(test_observation, model.get_member_means())
+    # Percentiles
+    search_initialization = test_observation - 15
+    perc_values = metrics.percentiles(
+        model.cdf, percentiles / 100, search_initialization)
+    for percentile, value in zip(percentiles, perc_values):
+        name = element_name + '_ENSEMBLE_PERC' + str(percentile)
+        dataframe.loc[row_index, name] = value
 
 
 def main(element_name, model_names, station_names, train_days, issue,
@@ -89,7 +107,7 @@ def main(element_name, model_names, station_names, train_days, issue,
     # Ensemble definition
     ensemble_grouping, ensemble_columns = \
         _model_to_group(model_names, element_name)
-    obs_col = element_name + '_OBS'
+    observation_column = element_name + '_OBS'
     model_mix = mixture_model.GaussianMixtureModel(
         len(ensemble_columns), ensemble_grouping)
 
@@ -112,17 +130,11 @@ def main(element_name, model_names, station_names, train_days, issue,
 
         hours_in_group = data.forecast_hour.unique()
 
-        # TODO TdR 30.05.2016 : Move lag calculation inside of data assimilate.
-        # Take latest lag to be conservative.
-        lag = data_assimilation.calculate_training_lag(hours_in_group[-1])
-
         # The dates to predict for.
         prediction_dates = data['valid_date'].unique()
         assert len(prediction_dates) * len(station_names) == len(data), \
             "Each station valid date should only have a single prediction"
 
-        # Prediction intervals
-        thresholds = np.arange(-30, 30, 0.5) + 273.15
         # Variables for plotting
         model_mix_weights = []
         model_mix_variances = []
@@ -130,32 +142,31 @@ def main(element_name, model_names, station_names, train_days, issue,
         plot_valid_dates = []
 
         # Moving window prediction
-        row_count = 0
         for index, row in data.iterrows():
-
             logging.debug("Starting with row %s" % (str(row['valid_date'])))
             # If one of the model prediction forecasts is unavailable, skip.
-            if row[ensemble_columns + [obs_col]].isnull().any():
+            if row[ensemble_columns + [observation_column]].isnull().any():
                 continue
 
-            # Select data
+            # Prepare train data
             valid_date = row['valid_date']
-            first_date = valid_date - pd.DateOffset(days=lag + train_days)
-            last_date = valid_date - pd.DateOffset(days=lag)
-            # TODO Selection might be expensive. Alternative is to index first.
-            train_data = data[
-                (data.valid_date <= last_date) & (data.valid_date > first_date)
-            ].dropna(axis=0, subset=ensemble_columns + [obs_col])
+            latest_forecast_hour = hours_in_group[-1]
+            train_data = data_assimilation.select_train_data(
+                data, latest_forecast_hour, valid_date, train_days,
+                ensemble_columns, observation_column
+            )
+
             if len(train_data) < (train_days * 0.5):
-                logging.debug(
-                  "Not enough training days (%s / %d), skipping date %s." % (
+                logging.warn(
+                  "Not enough training days (%s / %d), skipping date %s" % (
                         str(len(train_data)).zfill(2), train_days,
                         str(valid_date)))
                 continue
+
             X_train = train_data[ensemble_columns].as_matrix()
-            y_train = train_data[obs_col].as_matrix()
+            y_train = train_data[observation_column].as_matrix()
             X_test = row[ensemble_columns].as_matrix()
-            y_test = row[obs_col]
+            y_test = row[observation_column]
 
             # Train bias model
             logging.debug("Training bias model..")
@@ -175,49 +186,15 @@ def main(element_name, model_names, station_names, train_days, issue,
             X_test = model_bias.predict(X_test)
             model_mix.set_member_means(X_test)
 
-            # Verify
-            # Ensemble PDF
-            full_data.loc[index, element_name + '_ENSEMBLE_PDF'] = \
-                model_mix.pdf(y_test)
-            # Ensemble CDF
-            full_data.loc[index, element_name + '_ENSEMBLE_CDF'] = \
-                model_mix.cdf(y_test)
-            full_data.loc[index, element_name + '_ENSEMBLE_CDF_FREEZE'] = \
-                model_mix.cdf(273.15)
-            # CRPS
-            threshold_cdfs = model_mix.cdf(thresholds)
-            full_data.loc[index, element_name + '_CRPS'] = \
-                metrics.crps(thresholds, threshold_cdfs, y_test)
-            # Ensemble mean
-            full_data.loc[index, element_name + '_ENSEMBLE_MEAN'] = \
-                model_mix.mean()
-            # Percentiles
-            perc_start_time = time()
-            percentiles = np.array([5, 10, 25, 75, 90, 95])
-            perc_values = metrics.percentiles(
-                model_mix.cdf, percentiles / 100, y_test - 15)
-            for percentile, value in zip(percentiles, perc_values):
-                name = element_name + '_ENSEMBLE_PERC' + str(percentile)
-                full_data.loc[index, name] = value
-
-            # For determining the ensemble verification rank / calibrationl
-            # Rank only makes sense if the ensemble weights are uniformly
-            # distributed.
-            obs_in_forecasts = \
-                list(model_mix.get_member_means()) + list([y_test])
-            obs_in_forecasts.sort()
-            full_data.loc[index, element_name + '_OBS_RANK'] = \
-                obs_in_forecasts.index(y_test)
-            row_count += 1
-            # TODO For debugging.
-            # plot.plot_distribution(model_mix, row[obs_col], valid_date)
-            logging.debug("Done with %s: %.3fs" %
-                          (str(valid_date), time() - perc_start_time))
+            # Add predictions to dataset
+            PERCENTILES = np.array([5, 10, 25, 75, 90, 95])
+            add_model_predictions(
+                full_data, model_mix, y_test, index, element_name, PERCENTILES)
         logging.info("Done with forecast hour group %d (%.2fs)." %
                      (group_id, time() - fh_time))
         for forecast_hour in hours_in_group:
             plot.plot_ensemble_percentiles(
-                forecast_hour, percentiles, element_name, full_data)
+                forecast_hour, PERCENTILES, element_name, full_data)
         plot.plot_model_parameters(
             plot_valid_dates, model_mix_weights, model_mix_variances,
             model_bias_intercepts,

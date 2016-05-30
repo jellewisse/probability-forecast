@@ -1,5 +1,6 @@
 """Module containing methods for plotting."""
 
+import logging
 import numpy as np
 import operator as op
 from math import isnan
@@ -34,8 +35,8 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     cm = cb.get_map('Blues', 'Sequential', nr_classes).hex_colors
     # Coverage fields
     for i in range(nr_classes):
-        print("Plotting surface between %s and %s" %
-              (percentile_columns[i], percentile_columns[-i - 1]))
+        logging.debug("Plotting surface between %s and %s" %
+                      (percentile_columns[i], percentile_columns[-i - 1]))
         ax.fill_between(
             D['valid_date'].values,
             D[percentile_columns[i]].values - 273.15,

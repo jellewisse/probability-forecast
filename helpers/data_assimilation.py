@@ -11,6 +11,24 @@ from helpers.interpolation import interpolate
 # For now these are hard-coded since there only is one station
 
 
+def yield_training_iterator(dataframe):
+    """To define."""
+    pass
+
+
+def select_train_data(dataframe, forecast_hour, valid_date, train_days,
+                      feature_columns, observation_column):
+    """Return a dataframe usable for moving-window training."""
+    lag = calculate_training_lag(forecast_hour)
+    first_date = valid_date - pd.DateOffset(days=lag + train_days)
+    last_date = valid_date - pd.DateOffset(days=lag)
+    train_data = dataframe[
+        (dataframe.valid_date <= last_date) &
+        (dataframe.valid_date > first_date)
+    ].dropna(axis=0, subset=feature_columns + [observation_column])
+    return train_data
+
+
 def calculate_training_lag(forecast_hour):
     """Calculate delay in days to exclude from a dataset.
 
@@ -26,11 +44,6 @@ def filter_unused_forecast_hours(dataframe, forecast_hours):
     hour_out_of_bounds = ~dataframe.forecast_hour.isin(forecast_hours)
     out_of_bounds_index = hour_out_of_bounds[hour_out_of_bounds].index
     dataframe.drop(out_of_bounds_index, inplace=True)
-
-
-def yield_training_iterator(data_frame, ):
-    """To define."""
-    pass
 
 
 def _get_element_key(model_name, perturbation_id,
