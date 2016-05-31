@@ -32,7 +32,7 @@ class SimpleBiasCorrector(BiasCorrector):
 
     def __init__(self, member_count, grouping=None):
         """Constructor based on either member count or a grouping list."""
-        # TODO Support grouping
+        # TODO TdR 31.05.16 : Support grouping
         super().__init__(member_count)
 
         # Initialize parameters

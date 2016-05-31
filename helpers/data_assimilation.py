@@ -11,9 +11,9 @@ from helpers.interpolation import interpolate
 # For now these are hard-coded since there only is one station
 
 
-def yield_training_iterator(dataframe):
-    """To define."""
-    pass
+def check_data_coverage(available_days, train_days):
+    """Check whether at least half of the training period is covered."""
+    return len(available_days) >= (train_days * 0.5)
 
 
 def select_train_data(dataframe, forecast_hour, valid_date, train_days,

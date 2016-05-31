@@ -128,11 +128,10 @@ def main(element_name, model_names, station_names, train_days, issue,
                          group_id)
             continue
 
-        hours_in_group = data.forecast_hour.unique()
-
         # The dates to predict for.
-        prediction_dates = data['valid_date'].unique()
-        assert len(prediction_dates) * len(station_names) == len(data), \
+        dates_in_group = data['valid_date'].unique()
+        hours_in_group = data.forecast_hour.unique()
+        assert len(dates_in_group) * len(station_names) == len(data), \
             "Each station valid date should only have a single prediction"
 
         # Variables for plotting
@@ -142,21 +141,25 @@ def main(element_name, model_names, station_names, train_days, issue,
         plot_valid_dates = []
 
         # Moving window prediction
+        # TODO TdR 31.05.16 : Loop over prediction dates instead of rows
         for index, row in data.iterrows():
             logging.debug("Starting with row %s", str(row['valid_date']))
             # If one of the model prediction forecasts is unavailable, skip.
             if row[ensemble_columns + [observation_column]].isnull().any():
                 continue
 
-            # Prepare train data
+            # Select train data
             valid_date = row['valid_date']
             latest_forecast_hour = hours_in_group[-1]
+            # TODO TdR 31.05.16 : select test examples as well.
             train_data = data_assimilation.select_train_data(
                 data, latest_forecast_hour, valid_date, train_days,
                 ensemble_columns, observation_column
             )
 
-            if len(train_data) < (train_days * 0.5):
+            # Check data quality
+            train_dates = train_data['valid_date'].unique()
+            if data_assimilation.check_data_coverage(train_dates, train_days):
                 logging.warn(
                     "Not enough training days (%s / %d), skipping date %s",
                     str(len(train_data)).zfill(2), train_days,
