@@ -53,19 +53,6 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
-def construct_run_identifier(element_name, model_issue, forecast_hours,
-                             model_names, station_names, train_days):
-    """Construct a unique run identifier to label output with."""
-    identifier = ''
-    identifier += 'E_' + element_name
-    identifier += '_I_' + model_issue
-    identifier += '_FH_' + ('_'.join([str(x) for x in forecast_hours]))
-    identifier += '_M_' + ('_'.join(model_names))
-    identifier += '_S_' + ('_'.join(station_names))
-    identifier += '_T_' + str(train_days)
-    return identifier
-
-
 def add_model_predictions(dataframe, model, test_observation, row_index,
                           element_name, percentiles):
     """Add model predictions to the dataframe."""
@@ -172,20 +159,13 @@ def main(element_name, model_names, station_names, train_days, issue,
 
             # Check data quality
             train_dates = train_data['valid_date'].unique()
-            if data_assimilation.check_data_coverage(train_dates, train_days):
+            if not data_assimilation.check_data_coverage(
+              train_dates, train_days):
                 logging.warn(
                     "Not enough training days (%s / %d), skipping date %s",
                     str(len(train_data)).zfill(2), train_days,
                     str(valid_date))
                 continue
-
-            # Write dataset to file for reproducability
-            logging.debug("Writing dataset to file..")
-            run_id = \
-                construct_run_identifier(element_name, model_issue,
-                                         hours_in_group, model_names,
-                                         station_names, train_days)
-            data_io.write_csv(train_data, 'output/datasets/%s.csv' % run_id)
 
             X_train = train_data[ensemble_columns].as_matrix()
             y_train = train_data[observation_column].as_matrix()
