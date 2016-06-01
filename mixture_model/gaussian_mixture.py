@@ -6,11 +6,8 @@ from scipy.stats import norm
 # User modules
 from .base import MixtureModel
 
-NORM_CONSTANT = -0.5 * np.log(2 * np.pi)
-
 
 def _error_calculation(X, y):
-
     # Numpy column-wise subtraction is expressed as row-wise subtraction.
     E = (X.transpose() - y).transpose()
     return E
@@ -28,12 +25,13 @@ def _log_normal_pdf(squared_errors, variances):
     squared_errors: matrix (n x m)
     variances: vector (m)
     """
-    P = squared_errors * (-1.0 / (2.0 * variances))
-    P += (-1.0 / 2) * np.log(variances)
-    P += NORM_CONSTANT
-    if np.any(np.isnan(P)):
+    NORM_CONSTANT = -0.5 * np.log(2 * np.pi)
+    probability_matrix = squared_errors * (-1.0 / (2.0 * variances))
+    probability_matrix += (-1.0 / 2) * np.log(variances)
+    probability_matrix += NORM_CONSTANT
+    if np.any(np.isnan(probability_matrix)):
         raise ZeroDivisionError("Singularity in log normal pdfs.")
-    return P
+    return probability_matrix
 
 
 def find(needle, haystack):
@@ -47,44 +45,47 @@ def group_column_vec(X, group_map):
     return np.array([np.take(X, g).sum() for g in group_map])
 
 
+def _count_unique_items(items):
+    return len(np.unique(items))
+
+
 class GaussianMixtureModel(MixtureModel):
     """Base class for Gaussian Mixtures."""
 
-    def __init__(self, member_count, grouping=None):
+    def __init__(self, grouping=None):
         """Initialize a univariate normal Gaussian Mixture Model.
 
         Parameters
         ----------
-        member_count : integer
-            Number of members to initialize the mixture with
         grouping : list of integers specifying to which group a model belongs
         """
+        member_count = _count_unique_items(grouping)
         super().__init__(member_count, norm)
         self._forecast_prepared = False
         self.member_count = member_count
-        # Arguments for grouping
-        if grouping is None:
-            grouping = list(range(0, member_count))
         self.grouping = grouping
         self._optimizer = GaussianEM(grouping)
 
-    def fit(self, X, y):
+    def fit(self, training_features, training_observations):
         """Fitting the GMM with the provided data.
 
         Parameters
         ----------
-        X : array_like, shape (n_samples, n_members)
+        training_features : array_like, shape (n_samples, n_members)
             Input data, one column for each ensemble member
-        y : array_like, shape (n_samples,)
+        training_observations : array_like, shape (n_samples,)
             Targets for input data
         """
-        assert X.shape[1] == self.member_count, "Bad number of member inputs"
-        assert X.shape[0] == y.shape[0], "Input and targets do not match."
-        assert len(y.shape) == 1, "Provided y is not a vector."
+        assert training_features.shape[1] == self.member_count, \
+            "Bad number of member inputs"
+        assert training_features.shape[0] == training_observations.shape[0], \
+            "Input and targets do not match."
+        assert len(training_observations.shape) == 1, \
+            "Provided training_observations is not a vector."
         self._forecast_prepared = False
 
         # Call optimizer
-        self._optimizer.fit(X, y)
+        self._optimizer.fit(training_features, training_observations)
 
         # Update variances
         for (member, model_std) in \
@@ -314,16 +315,16 @@ class GaussianEM(object):
         # new_variances = error_sum_per_col / norm_per_col
         # TODO I have not yet verified whether the equations for variance
         # are correct when using groups
-        new_variances = \
-            (error_sum_per_col + self.variance_prior_W) / \
-            (norm_per_col + (self.variance_prior_nu - self._dim - 1))
+        # new_variances = \
+        #     (error_sum_per_col + self.variance_prior_W) / \
+        #     (norm_per_col + (self.variance_prior_nu - self._dim - 1))
         # TODO The below is an experiment to group standard deviations.
         # print("Variance per model:")
         # print(new_variances)
-        # new_variances = \
-        #     (error_sum_per_col.sum() + self.variance_prior_W) / \
-        #     (norm_per_col.sum() + (self.variance_prior_nu - self._dim - 1))
-        # new_variances = new_variances.repeat(self.group_count)
+        new_variances = \
+            (error_sum_per_col.sum() + self.variance_prior_W) / \
+            (norm_per_col.sum() + (self.variance_prior_nu - self._dim - 1))
+        new_variances = new_variances.repeat(self.group_count)
         # print("Combined variance:")
         # if np.any(new_variances > 3):
         #     print("Large variances detected.")
