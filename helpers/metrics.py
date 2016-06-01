@@ -76,40 +76,50 @@ def rank(new_value, member_values):
     return joined_list.index(new_value)
 
 
-# Test
-def percentiles(cdf_fun, percentiles, init_value=None):
-    """Return scores corresponding to given percentiles."""
+def percentiles(cdf_fun, percentiles,
+                search_start_value=None, search_increment_value=0.8,
+                search_probability_convergence=0.03):
+    """Return approximate scores corresponding to given percentiles.
+
+    parameters
+    ----------
+    cdf_fun: function pointer, density function to use
+    percentiles: list, percentiles to estimate the mass for
+    search_start_value: int, specify the start of the search window
+    search_increment_value: float, specify the search step size in the value
+        domain
+    search_probability_convergence: float, specify the convergence criterion in
+        probability mass
+    """
     assert np.logical_and(percentiles < 1, percentiles > 0).all()
 
     values = [math.nan] * len(percentiles)
     # TODO Find better initialization of last_value.
-    if init_value is None:
+    if search_start_value is None:
         last_value = -25.0 + 273.15
     else:
-        last_value = init_value
+        last_value = search_start_value
 
     # Simple uniform search scheme
-    step_size = 0.8  # Expressed in value
-    tolerance = 0.03  # Expressed in probability mass
     for count, percentile in enumerate(percentiles):
         # print("Finding percentile %.2f" % percentile)
         fringe = last_value
         fringe_cdf = cdf_fun(fringe)
         # Increment fringe until value is at or over percentile.
         while fringe_cdf < percentile:
-            fringe += step_size
+            fringe += search_increment_value
             fringe_cdf = cdf_fun(fringe)
             # print('%.2f, %.2f' % (fringe, fringe_cdf))
         # print("Overshot the percentile.")
         # It holds that;
         #  fringe >= percentile_value
-        #  cdf(fringe) < cdf(percentile_value + step_size)
+        #  cdf(fringe) < cdf(percentile_value + search_increment_value)
 
         # Simple binary search
         factor = 1
         sign = -1
-        while not _nearly_equal(fringe_cdf, percentile, tolerance):
-            fringe += factor * sign * step_size
+        while not _nearly_equal(fringe_cdf, percentile, search_probability_convergence):
+            fringe += factor * sign * search_increment_value
             fringe_cdf = cdf_fun(fringe)
             # print('%.2f, %.2f' % (fringe, fringe_cdf))
             if fringe_cdf > percentile:

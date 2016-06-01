@@ -94,42 +94,6 @@ def date_parser2(date):
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
 
 
-# TODO Test
-def read_knmi_observations(station_names):
-    """Wrapper around the pandas read_csv method to load KNMI observations."""
-    # Data type converters
-    converters = {
-        'T': convert_temperature_deci_degrees_to_kelvin,
-        'STN': convert_knmi_station_id_to_wmo
-    }
-
-    obs_data = pd.read_csv(
-        DATA_FILE_PATH + 'obs/obs_nl.csv',
-        na_values='',
-        comment='#',
-        usecols=['STN', 'YYYYMMDD', 'HH', 'T'],  # Only load these columns
-        parse_dates={'valid_date': ['YYYYMMDD', 'HH']},
-        date_parser=date_parser1,
-        converters=converters  # Apply converters to SI units.
-    )
-
-    obs_data.rename(
-        columns={
-            'STN': 'station_id',
-            # 'YYYYMMDD': 'valid_date',
-            # 'HH': 'valid_hour',  # Warning: starts at 1 to 24.
-            'T': '2T_OBS',
-        },
-        inplace=True
-    )
-
-    # Only keep data for the specified station names.
-    # TODO Support me
-    raise NotImplementedError("Support for multiple stations not yet added.")
-
-    return obs_data
-
-
 def read_observations(element_id, station_name):
     """Load observation file for given element."""
     # TODO Element id depends on the model it comes from, sadly.

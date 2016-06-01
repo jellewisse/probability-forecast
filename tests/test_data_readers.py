@@ -1,3 +1,4 @@
+"""Tests for data io."""
 # test_data_readers.py
 import pytest
 MOCK_DATA_PATH = 'tests/mock_data/'
@@ -6,37 +7,33 @@ MOCK_DATA_PATH = 'tests/mock_data/'
 @pytest.fixture(
     scope="module",
     params=[
-        {'model': 'fc', 'element_id': '167', 'issue': '0'},
-        {'model': 'eps', 'element_id': '167', 'issue': '0'},
-        {'model': 'control', 'element_id': '167', 'issue': '0'},
+        {'model': 'fc', 'element_id': '167',
+            'station_name': 'schiphol', 'issue': '0'},
+        {'model': 'eps', 'element_id': '167',
+            'station_name': 'schiphol', 'issue': '0'},
+        {'model': 'control', 'element_id': '167',
+            'station_name': 'schiphol', 'issue': '0'},
     ]
 )
 def file_parameters(request):
+    """Py.test fixture for file parameters."""
     request.param['file_path'] = MOCK_DATA_PATH
     return request.param
 
 
 def test_read_forecast_data(file_parameters):
-    """Tests whether the relevant foreacst files can be loaded."""
+    """Test whether the relevant foreacst files can be loaded."""
     # Test function relevant imports
-    import helpers.data_readers as data_readers
-    data_readers.read_forecast_data(**file_parameters)
-
-
-def test_read_knmi_observations():
-    """Tests whether the station observations can be loaded."""
-    # Test function relevant imports
-    import helpers.data_readers as data_readers
-    obs_data = data_readers.read_knmi_observations()
-    assert len(obs_data) != 0, "Observation data is empty."
+    from helpers import data_io
+    data_io.read_forecast_data(**file_parameters)
 
 
 def test_read_meta_data():
-    """Tests whether the meta data parser function works properly."""
+    """Test whether the meta data parser function works properly."""
     # Test function relevant imports
-    import helpers.data_readers as data_readers
-    lats, lons, dists = \
-        data_readers.read_meta_data('fc', '167', '0', file_path=MOCK_DATA_PATH)
-    assert lats == [52.25, 52.25, 52.38, 52.38], "Latitudes don't match."
-    assert lons == [4.88, 4.75, 4.88, 4.75], "Longitudes don't match."
-    assert dists == [9.29, 7.78, 8.76, 7.15], "Distances don't match."
+    from helpers import data_io
+    meta_data = data_io.read_meta_data(
+            'fc', '167', 'schiphol', '0', file_path=MOCK_DATA_PATH)
+    assert meta_data['latitude'] == [52.25, 52.25, 52.38, 52.38]
+    assert meta_data['longitude'] == [4.88, 4.75, 4.88, 4.75]
+    assert meta_data['distance'] == [9.29, 7.78, 8.76, 7.15]

@@ -11,9 +11,8 @@ class TestCrps:
 
     @classmethod
     def setup_class(self):
-        # 5 thresholds: this is part of problem set up
+        """Mock starting variables."""
         self.thresholds = [2., 4., 6., 8., 10.]
-        # 4 solutions: this is submitted by problem creator
         self.actuals = [3., 1.5, 7., 4.]
 
     def test_exact_answer(self):
@@ -67,6 +66,7 @@ class TestCrps:
         assert_almost_equal(crps, expected)
 
     def sigmoid(self, center):
+        """Compute the sigmoid function."""
         length = len(self.thresholds)
         return [1 / (1 + math.exp(-(x - center))) for x in range(0, length)]
 
@@ -82,14 +82,29 @@ class TestCrps:
 class TestPercentiles:
     """Test suite for calculating PDF percentiles."""
 
-    def test_normal_ppf(self):
+    def test_normal_ppf_compare_with_scipy(self):
         """Compare the percentiles function to the scipy ppf function."""
         from helpers import metrics
         cdf_fun = norm.cdf
 
+        # PDF parameters
+        mean = 0
+        standard_deviation = 1
+
+        # Percentiles to estimate
         percentiles = np.arange(1, 99, 1) / 100
-        loc = 0
-        scale = 1
-        target_percentiles = norm.ppf(percentiles, loc=loc, scale=scale)
-        comparison_percentiles = metrics.percentiles(cdf_fun, percentiles, -10)
+
+        # Percentile search parameters
+        search_start_value = -50
+        search_increment_value = 0.01
+        search_probability_threshold = 0.001
+
+        # Do comparison
+        target_percentiles = \
+            norm.ppf(percentiles, loc=mean, scale=standard_deviation)
+        comparison_percentiles = \
+            metrics.percentiles(
+                cdf_fun, percentiles,
+                search_start_value, search_increment_value,
+                search_probability_threshold)
         assert_almost_equal(target_percentiles, comparison_percentiles, 2)

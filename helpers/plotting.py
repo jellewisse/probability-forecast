@@ -12,7 +12,7 @@ from . import constants
 
 
 def plot_ensemble_percentiles(forecast_hour, percentiles,
-                              element_name, data):
+                              element_name, station_name, data):
     """Plot the probability distribution using the specified percentiles."""
     assert len(percentiles) % 2 == 0, "number of percentiles should be even."
     # Sort percentiles in ascending order
@@ -24,8 +24,10 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     other_columns = \
         ['valid_date', element_name + '_OBS', element_name + '_ENSEMBLE_MEAN']
 
-    # Select percentile data for the specified forecast hour
-    D = data[data.forecast_hour == forecast_hour]
+    # Select percentile data for the specified forecast hour and station
+    D = data[np.logical_and(
+        data.forecast_hour == forecast_hour, data.station_name == station_name
+    )]
     D = D[percentile_columns + other_columns]
     D.dropna(axis=0, inplace=True, subset=other_columns)
 
@@ -76,8 +78,8 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     plt.title(
         "Wing temperature probability forecast for +%dh" % (forecast_hour))
     plt.grid(True)
-    plt.savefig("output/img/%s_percentile_%dfh.png" %
-                (element_name, forecast_hour))
+    plt.savefig("output/img/%s_percentile_%s_%dfh.png" %
+                (element_name, station_name, forecast_hour))
     plt.clf()
 
 

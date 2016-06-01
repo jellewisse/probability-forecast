@@ -53,6 +53,12 @@ def _model_to_group(model_names, element_name):
     return grouping, ens_cols
 
 
+def _log_data_shape(data):
+    row_count = data.shape[0]
+    column_count = data.shape[1]
+    logging.debug("data.shape: %d rows, %d columns.", row_count, column_count)
+
+
 def add_model_predictions(dataframe, model, test_observation, row_index,
                           element_name, percentiles):
     """Add model predictions to the dataframe."""
@@ -99,7 +105,7 @@ def main(element_name, model_names, station_names, train_days, issue,
         model_names
     )
     logging.info("Done loading data (%ds).", time() - load_start_time)
-    logging.debug("data.shape: %d rows, %d columns.", full_data.shape)
+    _log_data_shape(full_data)
 
     # Drop unrequested forecast hours
     data_assimilation.filter_unused_forecast_hours(full_data, forecast_hours)
@@ -197,8 +203,10 @@ def main(element_name, model_names, station_names, train_days, issue,
         logging.info("Done with forecast hour group %d (%.2fs).",
                      group_id, time() - fh_time)
         for forecast_hour in hours_in_group:
-            plot.plot_ensemble_percentiles(
-                forecast_hour, PERCENTILES, element_name, full_data)
+            for station_name in station_names:
+                plot.plot_ensemble_percentiles(
+                    forecast_hour, PERCENTILES, element_name, station_name,
+                    full_data)
         plot.plot_model_parameters(
             plot_valid_dates, model_mix_weights, model_mix_variances,
             model_bias_intercepts,

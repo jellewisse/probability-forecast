@@ -36,11 +36,11 @@ def test_commuted_distance(mock_distances):
 
 
 def test_argsort():
-    from helpers.interpolation import argsort
+    from helpers.interpolation import _argsort
     input_list = [1, 2, 3, 100, 5]
     output_index = [0, 1, 2, 4, 3]
 
-    test_index = argsort(input_list)
+    test_index = _argsort(input_list)
     assert output_index == test_index
 
 
@@ -66,15 +66,15 @@ def mock_rectangle(request):
 
 
 def test_find_left_right():
-    from helpers.interpolation import find_left_right
+    from helpers.interpolation import _find_left_right
     lons = [0, 1]
     index = [0, 1]
-    test_index = find_left_right(lons, index)
+    test_index = _find_left_right(lons, index)
     assert list(test_index) == index
 
     # Now revert the index. The answer should be reversed as well
     index = list(reversed(index))
-    test_index = find_left_right(lons, index)
+    test_index = _find_left_right(lons, index)
     assert list(test_index) == index
 
 
