@@ -6,7 +6,7 @@ import numpy as np
 class MixtureModel(object, metaclass=abc.ABCMeta):
     """Base class for statistical model mixtures."""
 
-    def __init__(self, member_count, distribution):
+    def __init__(self, member_count, distribution, member_names=None):
         """Initialize a mixture model with a specific distribution.
 
         Parameters
@@ -16,8 +16,10 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
         member_count : integer
             Number of members to initialize the mixture with
         """
+        if member_names is None:
+            member_names = [''] * member_count
         self._members = \
-            [MixtureMember(distribution) for _ in range(member_count)]
+            [MixtureMember(distribution, name) for name in member_names]
         self.member_count = member_count
         self.weights = np.ones(member_count) / member_count
 
@@ -67,16 +69,16 @@ class MixtureModel(object, metaclass=abc.ABCMeta):
 class MixtureMember(object):
     """Base class for mixture member."""
 
-    def __init__(self, distribution):
+    def __init__(self, distribution, name=''):
         """Initialize the member with a distribution class."""
         self.distribution = distribution  # Distribution function
+        self.name = name
         self.parameters = {}  # Distribution function keyword arguments
-        self.bias = 0  # Additive bias vector
 
     def pdf(self, X):
         """Compute the member PDF."""
-        return self.distribution.pdf(X - self.bias, **self.parameters)
+        return self.distribution.pdf(X, **self.parameters)
 
     def cdf(self, X):
         """Compute the member CDF."""
-        return self.distribution.cdf(X - self.bias, **self.parameters)
+        return self.distribution.cdf(X, **self.parameters)

@@ -11,10 +11,23 @@ import matplotlib.pyplot as plt
 from . import constants
 
 
+def plot_auc(fpr, tpr, auc):
+    plt.figure()
+    plt.plot(fpr, tpr, label='ROC curve (area = %0.2f), %d points' %
+             (auc, len(fpr)))
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic')
+    plt.legend(loc="lower right")
+    plt.show()
+
+
 def plot_ensemble_percentiles(forecast_hour, percentiles,
                               element_name, station_name, data):
     """Plot the probability distribution using the specified percentiles."""
-    assert len(percentiles) % 2 == 0, "number of percentiles should be even."
     # Sort percentiles in ascending order
     percentiles = sorted(percentiles)
     percentile_columns = [

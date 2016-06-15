@@ -220,3 +220,12 @@ def write_csv(data_frame, file_path):
     """Write the provided dataframe as CSV to the path specified."""
     data_frame.dropna().to_csv(
         file_path, index=False, float_format='%f')
+
+
+def write_csv_for_r_package(data_frame, file_path):
+    data_frame['valid_date'] = \
+        data_frame['valid_date'].apply(lambda x: x.strftime("%Y%m%d%H"))
+    data_frame['issue_date'] = \
+        data_frame['issue_date'].apply(lambda x: x.strftime("%Y%m%d%H"))
+    data_frame.dropna().to_csv(
+        file_path, index=False, float_format='%f')

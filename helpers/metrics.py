@@ -1,6 +1,7 @@
 """Module containing verification metrics."""
 import math
 import numpy as np
+from sklearn import metrics
 
 
 def _heavyside(thresholds, actual):
@@ -42,6 +43,13 @@ def crps(thresholds, case, actual):
         crps += len(thresholds)  # treat delta at each threshold as 1
     crps /= len(thresholds)
     return crps
+
+
+def auc(labels, predictions):
+    fpr, tpr, thresholds = \
+        metrics.roc_curve(labels, predictions, pos_label=True)
+    auc = metrics.auc(fpr, tpr)
+    return auc
 
 
 def mean_crps(thresholds, predictions, actuals):
@@ -118,7 +126,8 @@ def percentiles(cdf_fun, percentiles,
         # Simple binary search
         factor = 1
         sign = -1
-        while not _nearly_equal(fringe_cdf, percentile, search_probability_convergence):
+        while not _nearly_equal(fringe_cdf, percentile,
+                                search_probability_convergence):
             fringe += factor * sign * search_increment_value
             fringe_cdf = cdf_fun(fringe)
             # print('%.2f, %.2f' % (fringe, fringe_cdf))

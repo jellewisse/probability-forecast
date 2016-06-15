@@ -12,7 +12,8 @@ class TestGaussianMixtureModel:
     def setup_class(self):
         """Mock a simple base class."""
         from mixture_model.gaussian_mixture import GaussianMixtureModel
-        self.model = GaussianMixtureModel(50)
+        mixture_model_grouping = np.arange(0, 50)
+        self.model = GaussianMixtureModel(mixture_model_grouping)
         self.model.set_member_means([0] * 50)
 
     def test_cdf_upper_boundary(self):
@@ -42,6 +43,11 @@ class TestGaussianEM:
         errors = np.arange(-1, 1, 0.01)
         goal_values = norm.logpdf(errors, loc=0, scale=1)
         attempt_values = _log_normal_pdf(errors**2, 1)
+        assert_almost_equal(goal_values, attempt_values)
+
+        # Comparison with a zero-mean wide normal distribution.
+        goal_values = norm.logpdf(errors, loc=0, scale=4)
+        attempt_values = _log_normal_pdf(errors**2, 4**2)
         assert_almost_equal(goal_values, attempt_values)
 
     def test_log_normal_pdf_is_isotropic(self):

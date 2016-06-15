@@ -52,19 +52,28 @@ def _count_unique_items(items):
 class GaussianMixtureModel(MixtureModel):
     """Base class for Gaussian Mixtures."""
 
-    def __init__(self, grouping=None):
+    def __init__(self, grouping, member_names=None):
         """Initialize a univariate normal Gaussian Mixture Model.
 
         Parameters
         ----------
         grouping : list of integers specifying to which group a model belongs
         """
-        member_count = _count_unique_items(grouping)
+        member_count = len(grouping)
         super().__init__(member_count, norm)
+        self.grouping = grouping
+        if member_names is None:
+            member_names = self._create_default_member_names()
+        assert len(member_names) == len(grouping)
+
         self._forecast_prepared = False
         self.member_count = member_count
-        self.grouping = grouping
+
         self._optimizer = GaussianEM(grouping)
+
+    def _create_default_member_names(self):
+        # TODO TdR 14-06-2016: Use grouping in names
+        return ['member_' + str(x) for x in range(1, len(self.grouping) + 1)]
 
     def fit(self, training_features, training_observations):
         """Fitting the GMM with the provided data.
@@ -90,7 +99,7 @@ class GaussianMixtureModel(MixtureModel):
         # Update variances
         for (member, model_std) in \
             zip(self._members,
-                self._optimizer.get_member_variances()):
+                np.sqrt(self._optimizer.get_member_variances())):
             member.parameters['scale'] = model_std
 
         # Update weights
@@ -117,15 +126,15 @@ class GaussianMixtureModel(MixtureModel):
     def set_member_variances(self, member_variances):
         """Modify the member variances explicitly."""
         assert len(member_variances) == self.member_count
-        for (variance, member) in zip(member_variances, self._members):
-            member.parameters['scale'] = variance
+        for (std, member) in zip(np.sqrt(member_variances), self._members):
+            member.parameters['scale'] = std
 
     def get_member_variances(self):
         """Return fitted member variances."""
-        return [
+        return np.square([
             member.parameters['scale']
             for member in self._members
-        ]
+        ])
 
     def mean(self):
         """Return the GMM mean forecast."""
