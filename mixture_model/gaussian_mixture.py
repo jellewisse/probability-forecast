@@ -337,16 +337,16 @@ class GaussianEM(object):
         # new_variances = error_sum_per_col / norm_per_col
         # TODO I have not yet verified whether the equations for variance
         # are correct when using groups
-        # new_variances = \
-        #     (error_sum_per_col + self.variance_prior_W) / \
-        #     (norm_per_col + (self.variance_prior_nu - self._dim - 1))
+        new_variances = \
+            (error_sum_per_col + self.variance_prior_W) / \
+            (norm_per_col + (self.variance_prior_nu - self._dim - 1))
         # TODO The below is an experiment to group standard deviations.
         # print("Variance per model:")
         # print(new_variances)
-        new_variances = \
-            (error_sum_per_col.sum() + self.variance_prior_W) / \
-            (norm_per_col.sum() + (self.variance_prior_nu - self._dim - 1))
-        new_variances = new_variances.repeat(self.group_count)
+        # new_variances = \
+        #     (error_sum_per_col.sum() + self.variance_prior_W) / \
+        #     (norm_per_col.sum() + (self.variance_prior_nu - self._dim - 1))
+        # new_variances = new_variances.repeat(self.group_count)
         # print("Combined variance:")
         # if np.any(new_variances > 3):
         #     print("Large variances detected.")
