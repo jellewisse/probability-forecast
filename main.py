@@ -251,6 +251,21 @@ def log_dict(dictionary):
     logging.info("End of configuration parameters.")
 
 
+def load_hyperparameters_from_configuration(config_dict,
+                                            configuration_name='main'):
+    """Load simple scalar hyperparameters from a dictionary."""
+    hyperparameters = {}
+    hyperparameters['variance_prior_W'] = config_dict['variance_prior_W']
+    hyperparameters['variance_prior_nu'] = config_dict['variance_prior_nu']
+    hyperparameters['weight_prior'] = \
+        _array_from_str(config_dict['weight_prior'])
+    return hyperparameters
+
+
+def _array_from_str(array_as_str):
+    return [float(x) for x in array_as_str[1:-1].split(',')]
+
+
 def write_predictions(dataframe, element_name, model_names, forecast_hours):
     """Write a data_frame to file."""
     # Write predictions to file
@@ -267,6 +282,15 @@ def write_verification(dataframe, element_name, model_names, forecast_hours):
     # Use pandas to_csv instead of the helper write_csv, since we use forecast
     # hour as index for verification results.
     dataframe.to_csv(file_path)
+
+
+def log_verification(verification_results, element_name):
+    forecast_hours = verification_results.index.values
+    averaged_results = verification_results.mean(axis=0)
+    logging.info("Number of forecast hours: %d", len(forecast_hours))
+    logging.info("Statistics for all hours:")
+    for name, result in zip(averaged_results.index, averaged_results.values):
+        logging.info("%s: %s", str(name), str(result))
 
 if __name__ == "__main__":
     """Run the probability forecast.
@@ -307,16 +331,19 @@ if __name__ == "__main__":
     # Station Selection
     station_names = config['station_names'].split(',')
 
+    hyperparameters = load_hyperparameters_from_configuration(config)
+
     # Run the program
     data = main(
         element_name, model_names, station_names, train_days,
         model_issue, forecast_hours, fh_group_size)
+    write_predictions(data, element_name, model_names, forecast_hours)
 
     logging.info("Running verification..")
     verification_results = \
         verification.run_verification_per_hour(data, config)
-    # Write results to file
-    write_predictions(data, element_name, model_names, forecast_hours)
+    log_verification(verification_results, element_name)
     write_verification(
         verification_results, element_name, model_names, forecast_hours)
+
     logging.info("Finished program.")

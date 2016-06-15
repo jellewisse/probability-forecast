@@ -52,7 +52,7 @@ def _count_unique_items(items):
 class GaussianMixtureModel(MixtureModel):
     """Base class for Gaussian Mixtures."""
 
-    def __init__(self, grouping, member_names=None):
+    def __init__(self, grouping, member_names=None, hyperparameters={}):
         """Initialize a univariate normal Gaussian Mixture Model.
 
         Parameters
@@ -69,7 +69,7 @@ class GaussianMixtureModel(MixtureModel):
         self._forecast_prepared = False
         self.member_count = member_count
 
-        self._optimizer = GaussianEM(grouping)
+        self._optimizer = GaussianEM(grouping, hyperparameters)
 
     def _create_default_member_names(self):
         # TODO TdR 14-06-2016: Use grouping in names
@@ -163,7 +163,7 @@ class GaussianEM(object):
     N_ITER = 2000
     E_TOL = 1e-5
 
-    def __init__(self, grouping):
+    def __init__(self, grouping, hyperparameters={}):
         """Class constructor."""
         # Grouping arguments
         self.grouping = grouping
@@ -177,13 +177,26 @@ class GaussianEM(object):
         # Parameters are defined per group, meaning they are the same for all
         # group members by definition.
         self._dim = 1  # Dimensionality of output
-        self.variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
-        self.variance_prior_nu = 2  # Scalar value, 2 means no prior.
+        self.set_hyperparameters(hyperparameters)
         self.variances = np.ones(self.group_count)
-        # Uniform prior on weights
-        self.weight_prior = \
-            np.ones(self.group_count) * 1  # All ones means no prior
         self.weights = np.ones(self.group_count) / self.member_count
+
+    def set_hyperparameters(self, params={}):
+        # Default arguments
+        if params == {}:
+            variance_prior_W, variance_prior_nu, weight_prior = \
+                self.get_default_hyperparameters()
+
+        self.variance_prior_W = variance_prior_W
+        self.variance_prior_nu = variance_prior_nu
+        self.weight_prior = weight_prior
+
+    def get_default_hyperparameters(self):
+        """Return parameters for a non-informative prior."""
+        variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
+        variance_prior_nu = 2  # Scalar value, 2 means no prior.
+        weight_prior = np.ones(self.group_count) * 1
+        return variance_prior_W, variance_prior_nu, weight_prior
 
     def get_member_variances(self):
         """Return variances for each member.
