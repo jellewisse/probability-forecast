@@ -22,7 +22,7 @@ cache = pyfscache.FSCache(CACHE_DIR)
 
 
 def main(element_name, model_names, station_names, train_days, issue,
-         forecast_hours, forecast_hour_group_size):
+         forecast_hours, forecast_hour_group_size, hyperparameters):
     """Main ETL method."""
     logging.info("Loading data..")
     load_start_time = time()
@@ -45,7 +45,8 @@ def main(element_name, model_names, station_names, train_days, issue,
     ensemble_grouping, ensemble_columns = \
         _model_to_group(model_names, element_name)
     observation_column = element_name + '_OBS'
-    model_mix = mixture_model.GaussianMixtureModel(ensemble_grouping)
+    model_mix = mixture_model.GaussianMixtureModel(
+        ensemble_grouping, hyperparameters=hyperparameters)
 
     # Bias corrector definition
     model_bias = bias_corrector.SimpleBiasCorrector(
@@ -255,8 +256,10 @@ def load_hyperparameters_from_configuration(config_dict,
                                             configuration_name='main'):
     """Load simple scalar hyperparameters from a dictionary."""
     hyperparameters = {}
-    hyperparameters['variance_prior_W'] = config_dict['variance_prior_W']
-    hyperparameters['variance_prior_nu'] = config_dict['variance_prior_nu']
+    hyperparameters['variance_prior_W'] = \
+        float(config_dict['variance_prior_W'])
+    hyperparameters['variance_prior_nu'] = \
+        float(config_dict['variance_prior_nu'])
     hyperparameters['weight_prior'] = \
         _array_from_str(config_dict['weight_prior'])
     return hyperparameters
@@ -336,7 +339,7 @@ if __name__ == "__main__":
     # Run the program
     data = main(
         element_name, model_names, station_names, train_days,
-        model_issue, forecast_hours, fh_group_size)
+        model_issue, forecast_hours, fh_group_size, hyperparameters)
     write_predictions(data, element_name, model_names, forecast_hours)
 
     logging.info("Running verification..")
