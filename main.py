@@ -15,6 +15,7 @@ from helpers import metrics
 import helpers.plotting as plot
 from helpers import data_assimilation
 from helpers import verification
+from helpers.persistence_forecaster import PersistenceForecaster
 
 # Configure cache
 CACHE_DIR = '.cache'
@@ -71,6 +72,8 @@ def main(element_name, model_names, station_names, train_days, issue,
         assert len(dates_in_group) * len(station_names) == len(data), \
             "Each station valid date should only have a single prediction"
 
+        persistence_forecaster = PersistenceForecaster()
+
         # Variables for plotting
         model_mix_weights = []
         model_mix_variances = []
@@ -109,6 +112,10 @@ def main(element_name, model_names, station_names, train_days, issue,
             X_test = row[ensemble_columns].as_matrix()
             y_test = row[observation_column]
 
+            # Do persistence forecast
+            persistence_forecast, _ = \
+                persistence_forecaster.run_and_update(y_test, valid_date)
+
             # Train bias model
             logging.debug("Training bias model..")
             model_bias.fit(X_train, y_train)
@@ -131,7 +138,8 @@ def main(element_name, model_names, station_names, train_days, issue,
             # Add predictions to dataset
             PERCENTILES = np.array([5, 10, 25, 50, 75, 90, 95])
             add_model_predictions(
-                full_data, model_mix, y_test, index, element_name, PERCENTILES)
+                full_data, model_mix, y_test, persistence_forecast,
+                index, element_name, PERCENTILES)
             add_model_parameters(
                 full_data, index, model_mix, model_bias, ensemble_columns)
         logging.info("Done with forecast hour group %d (%.2fs).",
@@ -189,7 +197,8 @@ def _log_data_shape(data):
     logging.debug("data.shape: %d rows, %d columns.", row_count, column_count)
 
 
-def add_model_predictions(dataframe, model, test_observation, row_index,
+def add_model_predictions(dataframe, model, test_observation,
+                          persistence_forecast, row_index,
                           element_name, percentiles):
     """Add model predictions to the dataframe."""
     # Local constants
@@ -211,6 +220,9 @@ def add_model_predictions(dataframe, model, test_observation, row_index,
     # Ensemble mean
     dataframe.loc[row_index, element_name + '_ENSEMBLE_MEAN'] = \
         model.mean()
+    # Persistence forecast
+    dataframe.loc[row_index, element_name + '_PERSISTENCE_FORECAST'] = \
+        persistence_forecast
     # Observation rank
     dataframe.loc[row_index, element_name + '_OBS_RANK'] = \
         metrics.rank(test_observation, model.get_member_means())
