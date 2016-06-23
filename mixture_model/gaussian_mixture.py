@@ -68,7 +68,6 @@ class GaussianMixtureModel(MixtureModel):
 
         self._forecast_prepared = False
         self.member_count = member_count
-
         self._optimizer = GaussianEM(grouping, hyperparameters)
 
     def _create_default_member_names(self):
@@ -184,19 +183,22 @@ class GaussianEM(object):
     def set_hyperparameters(self, params={}):
         # Default arguments
         if params == {}:
-            variance_prior_W, variance_prior_nu, weight_prior = \
-                self.get_default_hyperparameters()
+            params = self.get_default_hyperparameters()
 
-        self.variance_prior_W = variance_prior_W
-        self.variance_prior_nu = variance_prior_nu
-        self.weight_prior = weight_prior
+        self.variance_prior_W = params['variance_prior_W']
+        self.variance_prior_nu = params['variance_prior_nu']
+        self.weight_prior = np.array(params['weight_prior'])
 
     def get_default_hyperparameters(self):
         """Return parameters for a non-informative prior."""
-        variance_prior_W = 0  # Matrix of dim x dim, 0 means no prior.
-        variance_prior_nu = 2  # Scalar value, 2 means no prior.
-        weight_prior = np.ones(self.group_count) * 1
-        return variance_prior_W, variance_prior_nu, weight_prior
+        params = {}
+        # Matrix of dim x dim, 0 means no prior.
+        params['variance_prior_W'] = 0
+        # Scalar value, 2 means no prior.
+        params['variance_prior_nu'] = 2
+        # All ones means no prior
+        params['weight_prior'] = np.ones(self.group_count) * 1
+        return params
 
     def get_member_variances(self):
         """Return variances for each member.

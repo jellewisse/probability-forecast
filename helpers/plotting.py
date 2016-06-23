@@ -96,15 +96,28 @@ def plot_ensemble_percentiles(forecast_hour, percentiles,
     plt.clf()
 
 
+def get_bins(nr_bins, left_lim=0, right_lim=1):
+    assert left_lim < right_lim
+    assert nr_bins >= 2
+    bin_width = (right_lim - left_lim) / nr_bins
+    half_bin = bin_width / 2
+    bin_centers = np.arange(half_bin + left_lim, right_lim, bin_width)
+    bin_edges = np.append(left_lim, bin_centers + half_bin)
+    # bin_centers = np.arange(left_lim, right_lim + bin_width, bin_width)
+    return bin_centers, bin_edges, bin_width
+
+
 def plot_model_parameters(valid_dates, model_weights, model_variances,
                           bias_intercepts,
-                          forecast_hour_group, model_names, element_name):
+                          forecast_hour_group, model_names, element_name,
+                          grouping):
     """"Foo."""
     # Convert parameters to workable format
     model_weights = np.array(model_weights)
     model_variances = np.array(model_variances)
     bias_intercepts = np.array(bias_intercepts)
     model_names = np.array(model_names)
+
     # Only show a single line for EPS members.
     first_member_found = False
     valid_columns = []
@@ -117,6 +130,9 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
             continue
         # Mark column as valid
         valid_columns.append(count)
+
+    import pdb
+    pdb.set_trace()
 
     fig = plt.figure(figsize=(10, 12))
     ax1 = fig.add_subplot(311)
@@ -132,7 +148,6 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     plt.ylabel("Model contribution")
     plt.title("Model weights for valid dates on forecast hour %s" %
               str(forecast_hour_group))
-    # plt.legend(model_names[valid_columns])
 
     ax2 = fig.add_subplot(312, sharex=ax1)
     ps2 = ax2.plot(valid_dates, model_variances[:, valid_columns])
@@ -147,7 +162,6 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
     plt.ylim([0, 10])
     plt.title("Model variances for valid dates on forecast hour %s" %
               str(forecast_hour_group))
-    # plt.legend(model_names[valid_columns])
 
     ax3 = fig.add_subplot(313, sharex=ax1)
     ps3 = ax3.plot(valid_dates, bias_intercepts[:, valid_columns])
@@ -174,17 +188,6 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
                     (element_name, str(forecast_hour_group))
     plt.savefig(file_name)
     plt.clf()
-
-
-def get_bins(nr_bins, left_lim=0, right_lim=1):
-    assert left_lim < right_lim
-    assert nr_bins >= 2
-    bin_width = (right_lim - left_lim) / nr_bins
-    half_bin = bin_width / 2
-    bin_centers = np.arange(half_bin + left_lim, right_lim, bin_width)
-    bin_edges = np.append(left_lim, bin_centers + half_bin)
-    # bin_centers = np.arange(left_lim, right_lim + bin_width, bin_width)
-    return bin_centers, bin_edges, bin_width
 
 
 def _check_threshold(threshold, value):
@@ -248,8 +251,7 @@ def plot_relialibilty_sharpness_diagram(bin_centers, prob_hits, prob_count):
 
 
 def plot_rank_histogram(data, rank_column, bins=51):
-    """Plot Talagrand-histogram / verification-rank histogram of member
-    predictions."""
+    """Plot verification-rank histogram of member predictions."""
     if rank_column not in data:
         raise KeyError("No rank column present in data")
     if data[rank_column].value_counts(dropna=False).loc[np.nan] == len(data):
@@ -354,9 +356,8 @@ def get_hourly_values(data, apply_fun, forecast_hours):
 
 def plot_hourly_values(data, forecast_hours,
                        apply_fun, handle=None, color='b', spread=True):
-    """
-    forecast_hours should be numpy array
-    """
+    # forecast_hours should be numpy array.
+
     hourly_values = \
         get_hourly_values(data, apply_fun, forecast_hours)
     # Filter out NaN values

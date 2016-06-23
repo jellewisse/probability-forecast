@@ -146,7 +146,7 @@ def main(element_name, model_names, station_names, train_days, issue,
         plot.plot_model_parameters(
             plot_valid_dates, model_mix_weights, model_mix_variances,
             model_bias_intercepts,
-            hours_in_group, ensemble_columns, element_name)
+            hours_in_group, ensemble_columns, element_name, ensemble_grouping)
     return full_data.drop(ensemble_columns, axis=1)
 
 
@@ -335,6 +335,8 @@ if __name__ == "__main__":
     station_names = config['station_names'].split(',')
 
     hyperparameters = load_hyperparameters_from_configuration(config)
+    assert len(hyperparameters['weight_prior']) == len(model_names), \
+        "Different number of models than hyperprior weights."
 
     # Run the program
     data = main(
