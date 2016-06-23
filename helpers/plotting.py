@@ -131,9 +131,6 @@ def plot_model_parameters(valid_dates, model_weights, model_variances,
         # Mark column as valid
         valid_columns.append(count)
 
-    import pdb
-    pdb.set_trace()
-
     fig = plt.figure(figsize=(10, 12))
     ax1 = fig.add_subplot(311)
     ps1 = ax1.plot(valid_dates, model_weights[:, valid_columns])

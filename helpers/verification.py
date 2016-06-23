@@ -39,6 +39,19 @@ def run_verification_for_all_rows(forecast_hour, prediction_data, element):
     column_name = element + '_MEDIAN_MAE'
     data_row[column_name] = calculate_median_mae(prediction_data, element)
 
+    column_name = element + '_PERSISTENCE_MAE'
+    data_row[column_name] = calculate_persistence_mae(prediction_data, element)
+
+    column_name = element + '_MEAN_RMSE'
+    data_row[column_name] = calculate_mean_rmse(prediction_data, element)
+
+    column_name = element + '_MEDIAN_RMSE'
+    data_row[column_name] = calculate_median_rmse(prediction_data, element)
+
+    column_name = element + '_PERSISTENCE_RMSE'
+    data_row[column_name] = \
+        calculate_persistence_rmse(prediction_data, element)
+
     column_name = element + '_AUC_FREEZE'
     data_row[column_name] = calculate_freeze_auc(prediction_data, element)
 
@@ -46,13 +59,6 @@ def run_verification_for_all_rows(forecast_hour, prediction_data, element):
     data_row[column_name] = \
         calculate_fraction_below_zero(prediction_data, element)
     return data_row
-
-
-def calculate_mean_rmse(prediction_data, element):
-    prediction_column = element + '_ENSEMBLE_MEAN'
-    observation_column = element + '_OBS'
-    return calculate_mean_absolute_difference(
-        prediction_data, prediction_column, observation_column)
 
 
 def calculate_mean_mae(prediction_data, element):
@@ -66,6 +72,34 @@ def calculate_median_mae(prediction_data, element):
     prediction_column = element + '_ENSEMBLE_PERC50'
     observation_column = element + '_OBS'
     return calculate_mean_absolute_difference(
+        prediction_data, prediction_column, observation_column)
+
+
+def calculate_persistence_mae(prediction_data, element):
+    prediction_column = element + '_PERSISTENCE_FORECAST'
+    observation_column = element + '_OBS'
+    return calculate_mean_absolute_difference(
+        prediction_data, prediction_column, observation_column)
+
+
+def calculate_mean_rmse(prediction_data, element):
+    prediction_column = element + '_ENSEMBLE_MEAN'
+    observation_column = element + '_OBS'
+    return calculate_root_mean_squared_difference(
+        prediction_data, prediction_column, observation_column)
+
+
+def calculate_median_rmse(prediction_data, element):
+    prediction_column = element + '_ENSEMBLE_PERC50'
+    observation_column = element + '_OBS'
+    return calculate_root_mean_squared_difference(
+        prediction_data, prediction_column, observation_column)
+
+
+def calculate_persistence_rmse(prediction_data, element):
+    prediction_column = element + '_PERSISTENCE_FORECAST'
+    observation_column = element + '_OBS'
+    return calculate_root_mean_squared_difference(
         prediction_data, prediction_column, observation_column)
 
 
@@ -89,6 +123,10 @@ def get_verification_columns(element):
         element + '_CRPS',
         element + '_MEAN_MAE',
         element + '_MEDIAN_MAE',
+        element + '_PERSISTENCE_MAE',
+        element + '_MEAN_RMSE',
+        element + '_MEDIAN_RMSE',
+        element + '_PERSISTENCE_RMSE',
         element + '_AUC_FREEZE',
         'FRACTION_BELOW_0'
     ]
@@ -121,4 +159,5 @@ def calculate_mean_absolute_difference(dataframe, column_1, column_2):
 
 
 def calculate_root_mean_squared_difference(dataframe, column_1, column_2):
-    pass
+    error = (dataframe[column_1] - dataframe[column_2])
+    return np.sqrt(error.apply(np.square).mean())
